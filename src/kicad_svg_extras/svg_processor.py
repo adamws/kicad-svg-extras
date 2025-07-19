@@ -6,7 +6,7 @@
 import logging
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -119,7 +119,7 @@ class SVGProcessor:
             # Default copper color if not found
             return self.change_svg_color(svg_file, "#C83434", net_color, output_file)
 
-    def get_svg_dimensions(self, svg_file: Path) -> Tuple[str, str]:
+    def get_svg_dimensions(self, svg_file: Path) -> tuple[str, str]:
         """Get SVG width and height."""
         tree = ET.parse(svg_file)
         root = tree.getroot()
@@ -137,7 +137,7 @@ class SVGProcessor:
         return root.attrib.get("viewBox")
 
     def merge_svg_files(
-        self, svg_files: List[Path], output_file: Path, base_svg: Optional[Path] = None
+        self, svg_files: list[Path], output_file: Path, base_svg: Optional[Path] = None
     ) -> None:
         """Merge multiple SVG files into one."""
         if not svg_files:
@@ -236,8 +236,8 @@ class SVGProcessor:
 
     def create_colored_svg(
         self,
-        net_svgs: Dict[str, Path],
-        net_colors: Dict[str, str],
+        net_svgs: dict[str, Path],
+        net_colors: dict[str, str],
         output_file: Path,
         base_svg: Optional[Path] = None,
         *,

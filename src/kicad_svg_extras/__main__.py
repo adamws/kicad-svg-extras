@@ -11,7 +11,7 @@ import re
 import shutil
 import sys
 from pathlib import Path
-from typing import Dict, Optional, cast
+from typing import Optional, cast
 
 from kicad_svg_extras.svg_generator import SVGGenerator
 from kicad_svg_extras.svg_processor import SVGProcessor
@@ -19,10 +19,10 @@ from kicad_svg_extras.svg_processor import SVGProcessor
 logger = logging.getLogger(__name__)
 
 
-def load_color_config(config_file: Path) -> Dict[str, str]:
+def load_color_config(config_file: Path) -> dict[str, str]:
     """Load net color configuration from JSON file."""
     with open(config_file) as f:
-        return cast(Dict[str, str], json.load(f))
+        return cast(dict[str, str], json.load(f))
 
 
 def parse_color_value(color_value: str) -> str:
@@ -105,7 +105,7 @@ def parse_color_value(color_value: str) -> str:
     return color_value
 
 
-def load_flexible_colors(config_source: Path) -> Dict[str, str]:
+def load_flexible_colors(config_source: Path) -> dict[str, str]:
     """Load colors from various file formats with flexible parsing."""
     with open(config_source) as f:
         data = json.load(f)
@@ -147,7 +147,7 @@ def find_kicad_pro_file(pcb_file: Path) -> Optional[Path]:
 
 
 def get_color_for_net(
-    net_name: str, net_colors_config: Dict[str, str]
+    net_name: str, net_colors_config: dict[str, str]
 ) -> Optional[str]:
     """Get the color for a given net name, supporting wildcards."""
     # Only apply colors if user provided configuration

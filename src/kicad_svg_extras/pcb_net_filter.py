@@ -8,7 +8,7 @@ import os
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Dict, List, Optional, Set
+from typing import Optional
 
 try:
     import pcbnew
@@ -65,7 +65,7 @@ class PCBNetFilter:
         self.net_codes = self._get_net_codes()
         self.skip_zones = skip_zones
 
-    def _get_net_codes(self) -> Dict[str, int]:
+    def _get_net_codes(self) -> dict[str, int]:
         """Get mapping of net name to net code."""
         net_codes = {}
         netlist = self.board.GetNetInfo()
@@ -77,11 +77,11 @@ class PCBNetFilter:
         net_codes["<no_net>"] = 0  # Use net code 0 for no net
         return net_codes
 
-    def get_net_names(self) -> List[str]:
+    def get_net_names(self) -> list[str]:
         """Get all net names in the PCB."""
         return list(self.net_codes.keys())
 
-    def get_tracks_for_net(self, net_name: str) -> List[pcbnew.PCB_TRACK]:
+    def get_tracks_for_net(self, net_name: str) -> list[pcbnew.PCB_TRACK]:
         """Get all tracks for a specific net."""
         if net_name not in self.net_codes:
             return []
@@ -95,7 +95,7 @@ class PCBNetFilter:
 
         return tracks
 
-    def get_vias_for_net(self, net_name: str) -> List[pcbnew.PCB_VIA]:
+    def get_vias_for_net(self, net_name: str) -> list[pcbnew.PCB_VIA]:
         """Get all vias for a specific net."""
         if net_name not in self.net_codes:
             return []
@@ -109,7 +109,7 @@ class PCBNetFilter:
 
         return vias
 
-    def get_pads_for_net(self, net_name: str) -> List[pcbnew.PAD]:
+    def get_pads_for_net(self, net_name: str) -> list[pcbnew.PAD]:
         """Get all pads for a specific net."""
         if net_name not in self.net_codes:
             return []
@@ -145,7 +145,7 @@ class PCBNetFilter:
 
         return False
 
-    def create_filtered_pcb(self, net_names: Set[str], output_file: Path) -> None:
+    def create_filtered_pcb(self, net_names: set[str], output_file: Path) -> None:
         """Create a new PCB file with only the specified nets."""
         # Create a copy of the board by copying the original file first
         shutil.copy2(self.pcb_file, output_file)
@@ -224,7 +224,7 @@ class PCBNetFilter:
         return output_file
 
     def create_multi_net_pcb(
-        self, net_names: List[str], output_file: Optional[Path] = None
+        self, net_names: list[str], output_file: Optional[Path] = None
     ) -> Path:
         """Create a PCB file with multiple specified nets."""
         if output_file is None:

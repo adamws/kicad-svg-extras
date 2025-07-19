@@ -9,7 +9,7 @@ import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Optional
 
 from kicad_svg_extras.pcb_net_filter import PCBNetFilter
 from kicad_svg_extras.svg_processor import SVGProcessor
@@ -154,7 +154,7 @@ class SVGGenerator:
 
     def generate_all_net_svgs(
         self, side: str, output_dir: Path, *, keep_pcb: bool = False
-    ) -> Dict[str, Path]:
+    ) -> dict[str, Path]:
         """Generate SVGs for all nets."""
         output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -193,10 +193,10 @@ class SVGGenerator:
         self,
         side: str,
         output_dir: Path,
-        net_colors: Dict[str, str],
+        net_colors: dict[str, str],
         *,
         keep_pcb: bool = False,
-    ) -> Dict[str, Path]:
+    ) -> dict[str, Path]:
         """Generate SVGs grouped by color for optimization."""
         output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -304,7 +304,7 @@ class SVGGenerator:
         self._post_process_svg(output_file, add_background=False)
         return output_file
 
-    def get_net_names(self) -> List[str]:
+    def get_net_names(self) -> list[str]:
         """Get all net names from the PCB."""
         return [
             name for name in self.net_filter.get_net_names() if name
