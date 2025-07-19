@@ -129,18 +129,6 @@ ban-relative-imports = "all"
 # Tests can use magic values, assertions, and relative imports
 "tests/**/*" = ["PLR2004", "S101", "TID252"]
 
-[tool.coverage.run]
-source_pkgs = ["kicad_svg_extras", "tests"]
-branch = true
-parallel = true
-omit = [
-    "src/kicad_svg_extras/__about__.py",
-]
-
-[tool.coverage.paths]
-kicad_svg_extras = ["src/kicad_svg_extras", "*/kicad-svg-extras/src/kicad_svg_extras"]
-tests = ["tests", "*/kicad-svg-extras/tests"]
-
 [tool.mypy]
 python_version = "3.9"
 warn_return_any = true
@@ -158,10 +146,3 @@ module = [
     "pytest.*",
 ]
 ignore_missing_imports = true
-
-[tool.coverage.report]
-exclude_lines = [
-    "no cov",
-    "if __name__ == .__main__.:",
-    "if TYPE_CHECKING:",
-]
