@@ -9,7 +9,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from kicad_svg_extras import pcb_net_filter
-from kicad_svg_extras.colors import DEFAULT_BACKGROUND_DARK, apply_color_to_svg
+from kicad_svg_extras.colors import apply_color_to_svg
 
 logger = logging.getLogger(__name__)
 
@@ -41,46 +41,6 @@ def run_kicad_cli_svg(pcb_file: Path, layers: str, output_file: Path) -> None:
     if result.returncode != 0:
         msg = f"kicad-cli failed: {result.stderr}"
         raise RuntimeError(msg)
-
-
-def post_process_svg(svg_file: Path, *, add_background: bool = True) -> None:
-    """Post-process SVG to add background and fix units."""
-    # Parse SVG
-    tree = ET.parse(svg_file)
-    root = tree.getroot()
-
-    # Add background only if requested
-    if add_background:
-        desc = root.find(f".//{{{SVG_NS}}}desc")
-        if desc is not None:
-            svg_w = root.attrib.get("width", "")
-            svg_h = root.attrib.get("height", "")
-
-            parent = root
-            children = list(parent)
-            desc_index = children.index(desc)
-
-            # Add dark background
-            rect = ET.Element(
-                "rect",
-                x="0",
-                y="0",
-                width=svg_w,
-                height=svg_h,
-                fill=DEFAULT_BACKGROUND_DARK,
-            )
-            parent.insert(desc_index + 1, rect)
-
-            tree.write(svg_file, encoding="unicode")
-
-    # Fix units (mm to cm)
-    with open(svg_file) as f:
-        content = f.read()
-
-    content = content.replace('mm"', 'cm"')
-
-    with open(svg_file, "w") as f:
-        f.write(content)
 
 
 def generate_color_grouped_svgs(
@@ -135,7 +95,6 @@ def generate_color_grouped_svgs(
             # to avoid cross-contamination
             layers = "F.Cu" if side == "front" else "B.Cu"
             run_kicad_cli_svg(temp_pcb, layers, default_svg)
-            post_process_svg(default_svg, add_background=False)
 
             # Map all default nets to the same SVG file
             for net_name in default_nets:
@@ -163,7 +122,6 @@ def generate_color_grouped_svgs(
             # to avoid cross-contamination
             layers = "F.Cu" if side == "front" else "B.Cu"
             run_kicad_cli_svg(temp_pcb, layers, raw_svg)
-            post_process_svg(raw_svg, add_background=False)
 
             # Apply color to the intermediate SVG immediately
             apply_color_to_svg(raw_svg, color, color_svg)
@@ -190,7 +148,6 @@ def generate_edge_cuts_svg(pcb_file: Path, output_file: Path) -> Path:
     """Generate SVG for board edge cuts."""
     layers = "Edge.Cuts"
     run_kicad_cli_svg(pcb_file, layers, output_file)
-    post_process_svg(output_file, add_background=False)
     return output_file
 
 
@@ -205,7 +162,6 @@ def generate_silkscreen_svg(pcb_file: Path, side: str, output_file: Path) -> Pat
         raise ValueError(msg)
 
     run_kicad_cli_svg(pcb_file, layers, output_file)
-    post_process_svg(output_file, add_background=False)
     return output_file
 
 
