@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: MIT
 """Color management for KiCad SVG generation."""
 
-import colorsys
 import fnmatch
 import json
 import logging
@@ -21,8 +20,6 @@ DEFAULT_KICAD_COPPER = "#C83434"
 
 # Color validation constants
 MAX_RGB_VALUE = 255
-MAX_HSL_HUE = 360
-MAX_HSL_PERCENT = 100
 
 # Non-copper colors to exclude during auto-detection
 NON_COPPER_COLORS = frozenset(
@@ -83,7 +80,7 @@ def parse_color(color_value: str) -> str:
     """Parse various color formats and convert to hex format.
 
     Args:
-        color_value: Color in hex, RGB, HSL, or named format
+        color_value: Color in hex, RGB, or named format
 
     Returns:
         Color in #RRGGBB hex format
@@ -116,31 +113,6 @@ def parse_color(color_value: str) -> str:
             msg = f"RGB values must be between 0-{MAX_RGB_VALUE}, got ({r}, {g}, {b})"
             raise ColorError(msg)
         return f"#{r:02X}{g:02X}{b:02X}"
-
-    # HSL format: hsl(300, 100%, 50%)
-    hsl_match = re.match(
-        r"^hsl\s*\(\s*(\d+)\s*,\s*(\d+)%\s*,\s*(\d+)%\s*\)$", color_value
-    )
-    if hsl_match:
-        h, s, l = [int(val) for val in hsl_match.groups()]  # noqa: E741
-        # Validate HSL values
-        if not (0 <= h <= MAX_HSL_HUE):
-            msg = f"HSL hue must be between 0-{MAX_HSL_HUE}, got {h}"
-            raise ColorError(msg)
-        if not (0 <= s <= MAX_HSL_PERCENT):
-            msg = f"HSL saturation must be between 0-{MAX_HSL_PERCENT}, got {s}"
-            raise ColorError(msg)
-        if not (0 <= l <= MAX_HSL_PERCENT):
-            msg = f"HSL lightness must be between 0-{MAX_HSL_PERCENT}, got {l}"
-            raise ColorError(msg)
-
-        # Convert HSL to RGB using colorsys
-        h_norm = h / 360.0
-        s_norm = s / 100.0
-        l_norm = l / 100.0
-
-        r, g, b = colorsys.hls_to_rgb(h_norm, l_norm, s_norm)
-        return f"#{int(r*255):02X}{int(g*255):02X}{int(b*255):02X}"
 
     # Named colors
     if color_value.lower() in NAMED_COLORS:
