@@ -3,21 +3,63 @@
 # SPDX-License-Identifier: MIT
 """PCB net filtering utilities using pcbnew API."""
 
+import logging
 import os
+import shutil
 import tempfile
 from pathlib import Path
 from typing import Dict, List, Optional, Set
 
-import pcbnew
-import wx
+try:
+    import pcbnew
+    import wx
 
-wx.Log.SetLogLevel(wx.LOG_Warning)
+    wx.Log.SetLogLevel(wx.LOG_Warning)
+    PCBNEW_AVAILABLE = True
+except ImportError:
+    PCBNEW_AVAILABLE = False
+
+    # Create mock module for type hints
+    class MockBoard:
+        def GetNets(self):  # noqa: N802
+            return []
+
+        def GetTracks(self):  # noqa: N802
+            return []
+
+        def GetFootprints(self):  # noqa: N802
+            return []
+
+        def SaveAs(self, path):  # noqa: N802
+            pass
+
+    class MockPcbnew:
+        PCB_TRACK = "PCB_TRACK"
+        PCB_VIA = "PCB_VIA"
+        PAD = "PAD"
+        F_Cu = "F_Cu"
+        B_Cu = "B_Cu"
+
+        @staticmethod
+        def LoadBoard(path):  # noqa: N802, ARG004
+            return MockBoard()
+
+    pcbnew = MockPcbnew()
+    wx = None
+logger = logging.getLogger(__name__)
 
 
 class PCBNetFilter:
     """Filter PCB elements by net name using pcbnew API."""
 
-    def __init__(self, pcb_file: Path, skip_zones: bool = False):
+    def __init__(self, pcb_file: Path, *, skip_zones: bool = False):
+        if not PCBNEW_AVAILABLE:
+            msg = (
+                "pcbnew module not available. "
+                "This package requires KiCad to be installed with Python bindings. "
+                "For testing without KiCad, set KICAD_MOCK=1 environment variable."
+            )
+            raise ImportError(msg)
         self.pcb_file = pcb_file
         self.board = pcbnew.LoadBoard(str(pcb_file))
         self.net_codes = self._get_net_codes()
@@ -106,8 +148,6 @@ class PCBNetFilter:
     def create_filtered_pcb(self, net_names: Set[str], output_file: Path) -> None:
         """Create a new PCB file with only the specified nets."""
         # Create a copy of the board by copying the original file first
-        import shutil
-
         shutil.copy2(self.pcb_file, output_file)
 
         # Load the copied board
@@ -129,7 +169,8 @@ class PCBNetFilter:
         for track in tracks_to_remove:
             new_board.RemoveNative(track)
 
-        # Remove footprints that have no pads with specified nets, and remove pads not in specified nets
+        # Remove footprints that have no pads with specified nets, and remove pads
+        # not in specified nets
         footprints_to_remove = []
         for footprint in new_board.GetFootprints():
             # Check if this footprint has any pads with the specified nets
@@ -175,7 +216,7 @@ class PCBNetFilter:
         """Create a PCB file with only one net."""
         if output_file is None:
             # Create temporary file
-            fd, temp_path = tempfile.mkstemp(suffix='.kicad_pcb')
+            fd, temp_path = tempfile.mkstemp(suffix=".kicad_pcb")
             os.close(fd)
             output_file = Path(temp_path)
 
@@ -188,7 +229,7 @@ class PCBNetFilter:
         """Create a PCB file with multiple specified nets."""
         if output_file is None:
             # Create temporary file
-            fd, temp_path = tempfile.mkstemp(suffix='.kicad_pcb')
+            fd, temp_path = tempfile.mkstemp(suffix=".kicad_pcb")
             os.close(fd)
             output_file = Path(temp_path)
 
