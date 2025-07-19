@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2024-present adamws <adamws@users.noreply.github.com>
+# SPDX-FileCopyrightText: 2025-present adamws <adamws@users.noreply.github.com>
 #
 # SPDX-License-Identifier: MIT
 """Color management for KiCad SVG generation."""

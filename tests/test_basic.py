@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025-present adamws <adamws@users.noreply.github.com>
+#
+# SPDX-License-Identifier: MIT
 """Basic tests for kicad-svg-extras."""
 
 import subprocess
