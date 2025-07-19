@@ -14,6 +14,7 @@ from kicad_svg_extras import svg_generator
 from kicad_svg_extras.colors import (
     DEFAULT_BACKGROUND_LIGHT,
     load_color_config,
+    parse_color,
     resolve_net_color,
 )
 from kicad_svg_extras.svg_processor import (
@@ -36,7 +37,16 @@ def main():
     parser = argparse.ArgumentParser(
         description=(
             "Generate SVG files with custom per-net colors from KiCad PCB files"
-        )
+        ),
+        epilog=(
+            "Examples:\n"
+            "  %(prog)s --net-color 'GND:green' --net-color 'VCC:red' "
+            "board.kicad_pcb output/\n"
+            "  %(prog)s --net-color 'SIGNAL*:blue' --side front "
+            "board.kicad_pcb output/\n"
+            "  %(prog)s --colors colors.json board.kicad_pcb output/"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
         "pcb_file", type=Path, nargs="?", help="Input KiCad PCB file (.kicad_pcb)"
@@ -55,6 +65,16 @@ def main():
         type=Path,
         metavar="CONFIG_FILE",
         help="JSON file with net name to color mapping",
+    )
+    parser.add_argument(
+        "--net-color",
+        action="append",
+        metavar="NET_NAME:COLOR",
+        help=(
+            "Set color for specific net (format: 'net_name:color').  "
+            "Can be used multiple times. Supports hex (#FF0000), "
+            "RGB (rgb(255,0,0)), or named colors (red)."
+        ),
     )
     parser.add_argument(
         "--keep-intermediates",
@@ -156,6 +176,36 @@ def main():
         except Exception as e:
             logger.error(f"Error loading color configuration from {color_source}: {e}")
             sys.exit(1)
+
+    # Parse and add CLI net color arguments
+    if args.net_color:
+        for net_color_arg in args.net_color:
+            if ":" not in net_color_arg:
+                logger.error(
+                    f"Invalid net-color format: '{net_color_arg}'. "
+                    "Expected format: 'net_name:color'"
+                )
+                sys.exit(1)
+
+            net_name, color_value = net_color_arg.split(":", 1)
+            net_name = net_name.strip()
+            color_value = color_value.strip()
+
+            if not net_name:
+                logger.error(f"Empty net name in: '{net_color_arg}'")
+                sys.exit(1)
+
+            if not color_value:
+                logger.error(f"Empty color value in: '{net_color_arg}'")
+                sys.exit(1)
+
+            try:
+                parsed_color = parse_color(color_value)
+                net_colors_config[net_name] = parsed_color
+                logger.info(f"Set color for net '{net_name}': {parsed_color}")
+            except Exception as e:
+                logger.error(f"Invalid color '{color_value}' for net '{net_name}': {e}")
+                sys.exit(1)
 
     net_names = svg_generator.get_net_names(args.pcb_file)
 
