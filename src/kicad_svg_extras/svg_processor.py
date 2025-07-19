@@ -95,22 +95,40 @@ width="{unified_width}cm" height="{unified_height}cm" viewBox="{unified_viewbox}
 
 
 def add_background_to_svg(svg_file: Path, background_color: str) -> None:
-    """Add dark background to SVG file."""
+    """Add background to SVG file."""
     tree = ET.parse(svg_file)
     root = tree.getroot()
 
     desc = root.find(f".//{{{SVG_NS}}}desc")
     if desc is not None:
-        svg_w = root.attrib.get("width", "")
-        svg_h = root.attrib.get("height", "")
+        # Get viewBox dimensions instead of width/height with units
+        viewbox = root.attrib.get("viewBox")
+        if viewbox:
+            x, y, width, height = map(float, viewbox.split())
+        else:
+            # Fallback: strip units from width/height
+            svg_w = root.attrib.get("width", "100")
+            svg_h = root.attrib.get("height", "100")
+            # Remove common units
+            for unit in ["cm", "mm", "px", "pt", "in"]:
+                svg_w = svg_w.replace(unit, "")
+                svg_h = svg_h.replace(unit, "")
+            x, y = 0, 0
+            width = float(svg_w) if svg_w else 100
+            height = float(svg_h) if svg_h else 100
 
         parent = root
         children = list(parent)
         desc_index = children.index(desc)
 
-        # Add dark background
+        # Add background rectangle using viewBox coordinates
         rect = ET.Element(
-            "rect", x="0", y="0", width=svg_w, height=svg_h, fill=background_color
+            "rect",
+            x=str(x),
+            y=str(y),
+            width=str(width),
+            height=str(height),
+            fill=background_color,
         )
         parent.insert(desc_index + 1, rect)
 
