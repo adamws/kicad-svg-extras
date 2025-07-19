@@ -27,9 +27,6 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
-    - name: Install Hatch
-      run: pip install --upgrade hatch
-
     - name: Install KiCad Nightly
       run: |
         sudo add-apt-repository --yes ppa:kicad/kicad-dev-nightly
@@ -39,8 +36,13 @@ jobs:
     - name: Verify KiCad installation
       run: kicad-cli-nightly version
 
+    - name: Install test dependencies
+      run: |
+        pip install --upgrade pytest pytest-cov
+        pip install -e .
+
     - name: Run tests
-      run: hatch run test
+      run: pytest tests/
       env:
         KICAD_NIGHTLY: "1"
 

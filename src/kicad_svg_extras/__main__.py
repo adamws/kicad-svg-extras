@@ -243,9 +243,7 @@ def main():
         try:
             merge_svg_files(all_svgs_to_merge, side_output_file)
             if not args.no_background:
-                add_background_to_svg(
-                    side_output_file, args.background_color
-                )
+                add_background_to_svg(side_output_file, args.background_color)
             logger.info(f"Created colored SVG: {side_output_file}")
             all_side_svgs.append(side_output_file)
 

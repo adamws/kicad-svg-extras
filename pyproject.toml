@@ -28,16 +28,6 @@ dependencies = [
     # KiCad Python API is bundled with KiCad installation
 ]
 
-[project.optional-dependencies]
-dev = [
-    "pytest",
-    "pytest-cov",
-    "black",
-    "isort",
-    "flake8",
-    "mypy",
-]
-
 [project.scripts]
 kicad-svg-extras = "kicad_svg_extras.__main__:main"
 
@@ -51,17 +41,6 @@ path = "src/kicad_svg_extras/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/kicad_svg_extras"]
-
-[tool.hatch.envs.default]
-dependencies = [
-    "pytest",
-    "pytest-cov",
-]
-
-[tool.hatch.envs.default.scripts]
-test = "pytest {args:tests}"
-test-cov = "pytest --cov-report=term-missing --cov-config=pyproject.toml --cov=kicad_svg_extras --cov=tests {args:tests}"
-cov-report = ["test-cov", "coverage html"]
 
 [tool.hatch.envs.lint]
 detached = true

@@ -15,55 +15,20 @@ try:
     import wx
 
     wx.Log.SetLogLevel(wx.LOG_Warning)
-    PCBNEW_AVAILABLE = True
 except ImportError:
-    PCBNEW_AVAILABLE = False
-
-    # Create mock module for type hints
-    class MockBoard:
-        def GetNets(self):  # noqa: N802
-            return []
-
-        def GetTracks(self):  # noqa: N802
-            return []
-
-        def GetFootprints(self):  # noqa: N802
-            return []
-
-        def SaveAs(self, path):  # noqa: N802
-            pass
-
-    class MockPcbnew:
-        PCB_TRACK = "PCB_TRACK"
-        PCB_VIA = "PCB_VIA"
-        PAD = "PAD"
-        F_Cu = "F_Cu"
-        B_Cu = "B_Cu"
-
-        @staticmethod
-        def LoadBoard(path):  # noqa: N802, ARG004
-            return MockBoard()
-
-    pcbnew = MockPcbnew()
-    wx = None
+    msg = (
+        "pcbnew module not available. "
+        "This package requires KiCad to be installed with Python bindings. "
+        "Please install KiCad and ensure pcbnew is available in your Python "
+        "environment."
+    )
+    raise ImportError(msg)
 
 logger = logging.getLogger(__name__)
 
 
-def _ensure_pcbnew_available() -> None:
-    """Ensure pcbnew is available or raise ImportError."""
-    if not PCBNEW_AVAILABLE:
-        msg = (
-            "pcbnew module not available. "
-            "This package requires KiCad to be installed with Python bindings. "
-            "For testing without KiCad, set KICAD_MOCK=1 environment variable."
-        )
-        raise ImportError(msg)
-
-
 def load_board(pcb_file: Path):
     """Load a PCB board from file."""
-    _ensure_pcbnew_available()
     return pcbnew.LoadBoard(str(pcb_file))
 
 
@@ -165,7 +130,6 @@ def create_filtered_pcb(
     skip_zones: bool = False,
 ) -> None:
     """Create a new PCB file with only the specified nets."""
-    _ensure_pcbnew_available()
 
     # Create a copy of the board by copying the original file first
     shutil.copy2(pcb_file, output_file)
@@ -240,7 +204,7 @@ def create_multi_net_pcb(
     *,
     skip_zones: bool = False,
 ) -> Path:
-    """Create a PCB file with multiple specified nets."""
+    """Create a PCB file with only specified nets."""
     if output_file is None:
         # Create temporary file
         fd, temp_path = tempfile.mkstemp(suffix=".kicad_pcb")
@@ -249,4 +213,3 @@ def create_multi_net_pcb(
 
     create_filtered_pcb(pcb_file, set(net_names), output_file, skip_zones=skip_zones)
     return output_file
-

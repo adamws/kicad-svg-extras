@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 SVG_NS = "http://www.w3.org/2000/svg"
 ET.register_namespace("", SVG_NS)
 
+
 def merge_svg_files(
     svg_files: list[Path], output_file: Path, base_svg: Optional[Path] = None
 ) -> None:
@@ -91,6 +92,7 @@ width="{unified_width}cm" height="{unified_height}cm" viewBox="{unified_viewbox}
     # Write merged SVG
     with open(output_file, "w") as f:
         f.write(svg_content)
+
 
 def add_background_to_svg(svg_file: Path, background_color: str) -> None:
     """Add dark background to SVG file."""
