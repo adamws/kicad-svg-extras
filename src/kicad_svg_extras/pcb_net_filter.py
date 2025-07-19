@@ -52,52 +52,6 @@ def get_net_names(pcb_file: Path) -> list[str]:
     return list(net_codes.keys())
 
 
-def get_tracks_for_net(board, net_name: str, net_codes: dict[str, int]) -> list:
-    """Get all tracks for a specific net."""
-    if net_name not in net_codes:
-        return []
-
-    net_code = net_codes[net_name]
-    tracks = []
-
-    for track in board.GetTracks():
-        if track.GetNetCode() == net_code:
-            tracks.append(track)
-
-    return tracks
-
-
-def get_vias_for_net(board, net_name: str, net_codes: dict[str, int]) -> list:
-    """Get all vias for a specific net."""
-    if net_name not in net_codes:
-        return []
-
-    net_code = net_codes[net_name]
-    vias = []
-
-    for track in board.GetTracks():
-        if isinstance(track, pcbnew.PCB_VIA) and track.GetNetCode() == net_code:
-            vias.append(track)
-
-    return vias
-
-
-def get_pads_for_net(board, net_name: str, net_codes: dict[str, int]) -> list:
-    """Get all pads for a specific net."""
-    if net_name not in net_codes:
-        return []
-
-    net_code = net_codes[net_name]
-    pads = []
-
-    for footprint in board.GetFootprints():
-        for pad in footprint.Pads():
-            if pad.GetNetCode() == net_code:
-                pads.append(pad)
-
-    return pads
-
-
 def has_elements_on_side(
     board, net_name: str, side: str, net_codes: dict[str, int]
 ) -> bool:
@@ -108,16 +62,9 @@ def has_elements_on_side(
     net_code = net_codes[net_name]
     cu_layer = pcbnew.F_Cu if side == "front" else pcbnew.B_Cu
 
-    # Check for tracks and vias on the specified side
-    for track in board.GetTracks():
-        if track.GetNetCode() == net_code and track.IsOnLayer(cu_layer):
+    for item in board.AllConnectedItems():
+        if item.GetNetCode() == net_code and item.IsOnLayer(cu_layer):
             return True
-
-    # Check for pads on the specified side
-    for footprint in board.GetFootprints():
-        for pad in footprint.Pads():
-            if pad.GetNetCode() == net_code and pad.IsOnLayer(cu_layer):
-                return True
 
     return False
 
