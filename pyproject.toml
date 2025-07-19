@@ -126,8 +126,8 @@ known-first-party = ["kicad_svg_extras"]
 ban-relative-imports = "all"
 
 [tool.ruff.lint.per-file-ignores]
-# Tests can use magic values, assertions, and relative imports
-"tests/**/*" = ["PLR2004", "S101", "TID252"]
+# Tests can use magic values, assertions, relative imports and partial executable paths
+"tests/**/*" = ["PLR2004", "S101", "TID252", "S607"]
 
 [tool.mypy]
 python_version = "3.9"

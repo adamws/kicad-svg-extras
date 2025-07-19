@@ -18,12 +18,10 @@ SVG_NS = "http://www.w3.org/2000/svg"
 ET.register_namespace("", SVG_NS)
 
 
-def run_kicad_cli_svg(
-    pcb_file: Path, layers: str, output_file: Path, kicad_cli_cmd: str = "kicad-cli"
-) -> None:
+def run_kicad_cli_svg(pcb_file: Path, layers: str, output_file: Path) -> None:
     """Run kicad-cli to generate SVG."""
     cmd = [
-        kicad_cli_cmd,
+        "kicad-cli",
         "pcb",
         "export",
         "svg",
@@ -92,7 +90,6 @@ def generate_color_grouped_svgs(
     net_colors: dict[str, str],
     *,
     keep_pcb: bool = False,
-    kicad_cli_cmd: str = "kicad-cli",
     skip_zones: bool = False,
 ) -> dict[str, Path]:
     """Generate SVGs grouped by color for optimization."""
@@ -137,7 +134,7 @@ def generate_color_grouped_svgs(
             # Use only copper layer for side-specific SVGs
             # to avoid cross-contamination
             layers = "F.Cu" if side == "front" else "B.Cu"
-            run_kicad_cli_svg(temp_pcb, layers, default_svg, kicad_cli_cmd)
+            run_kicad_cli_svg(temp_pcb, layers, default_svg)
             post_process_svg(default_svg, add_background=False)
 
             # Map all default nets to the same SVG file
@@ -165,7 +162,7 @@ def generate_color_grouped_svgs(
             # Use only copper layer for side-specific SVGs
             # to avoid cross-contamination
             layers = "F.Cu" if side == "front" else "B.Cu"
-            run_kicad_cli_svg(temp_pcb, layers, raw_svg, kicad_cli_cmd)
+            run_kicad_cli_svg(temp_pcb, layers, raw_svg)
             post_process_svg(raw_svg, add_background=False)
 
             # Apply color to the intermediate SVG immediately
@@ -189,19 +186,15 @@ def generate_color_grouped_svgs(
     return net_svgs
 
 
-def generate_edge_cuts_svg(
-    pcb_file: Path, output_file: Path, kicad_cli_cmd: str = "kicad-cli"
-) -> Path:
+def generate_edge_cuts_svg(pcb_file: Path, output_file: Path) -> Path:
     """Generate SVG for board edge cuts."""
     layers = "Edge.Cuts"
-    run_kicad_cli_svg(pcb_file, layers, output_file, kicad_cli_cmd)
+    run_kicad_cli_svg(pcb_file, layers, output_file)
     post_process_svg(output_file, add_background=False)
     return output_file
 
 
-def generate_silkscreen_svg(
-    pcb_file: Path, side: str, output_file: Path, kicad_cli_cmd: str = "kicad-cli"
-) -> Path:
+def generate_silkscreen_svg(pcb_file: Path, side: str, output_file: Path) -> Path:
     """Generate SVG for silkscreen layer."""
     if side == "front":
         layers = "F.Silkscreen"
@@ -211,7 +204,7 @@ def generate_silkscreen_svg(
         msg = f"Invalid side: {side}. Must be 'front' or 'back'"
         raise ValueError(msg)
 
-    run_kicad_cli_svg(pcb_file, layers, output_file, kicad_cli_cmd)
+    run_kicad_cli_svg(pcb_file, layers, output_file)
     post_process_svg(output_file, add_background=False)
     return output_file
 

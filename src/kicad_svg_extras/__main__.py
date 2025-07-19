@@ -96,11 +96,6 @@ def main():
         action="store_true",
         help="Include board edge cuts (Edge.Cuts) in the output",
     )
-    parser.add_argument(
-        "--nightly",
-        action="store_true",
-        help=("Use kicad-cli-nightly instead of kicad-cli (for KiCad nightly builds)"),
-    )
 
     args = parser.parse_args()
 
@@ -127,9 +122,6 @@ def main():
     if not args.pcb_file.suffix == ".kicad_pcb":
         logger.error("Input file must be a .kicad_pcb file")
         sys.exit(1)
-
-    # Initialize kicad CLI command
-    kicad_cli_cmd = "kicad-cli-nightly" if args.nightly else "kicad-cli"
 
     # Load color configuration with auto-detection
     net_colors_config = {}
@@ -199,7 +191,6 @@ def main():
             temp_dir,
             resolved_net_colors,
             keep_pcb=args.keep_intermediates,
-            kicad_cli_cmd=kicad_cli_cmd,
             skip_zones=args.skip_zones,
         )
 
@@ -219,9 +210,7 @@ def main():
         if args.with_edge:
             edge_svg = temp_dir / f"edge_cuts_{side}.svg"
             try:
-                svg_generator.generate_edge_cuts_svg(
-                    args.pcb_file, edge_svg, kicad_cli_cmd
-                )
+                svg_generator.generate_edge_cuts_svg(args.pcb_file, edge_svg)
                 all_svgs_to_merge.append(edge_svg)
                 logger.info(f"Generated edge cuts SVG: {edge_svg.name}")
             except Exception as e:
@@ -235,7 +224,7 @@ def main():
             silkscreen_svg = temp_dir / f"silkscreen_{side}.svg"
             try:
                 svg_generator.generate_silkscreen_svg(
-                    args.pcb_file, side, silkscreen_svg, kicad_cli_cmd
+                    args.pcb_file, side, silkscreen_svg
                 )
                 all_svgs_to_merge.append(silkscreen_svg)
                 logger.info(f"Generated silkscreen SVG: {silkscreen_svg.name}")

@@ -2,7 +2,6 @@ name: CI
 
 on:
   push:
-    branches: [ "master", "main" ]
   pull_request:
     branches: [ "master", "main" ]
 
@@ -12,39 +11,28 @@ concurrency:
 
 jobs:
   test:
-    name: Python ${{ matrix.python-version }} on Linux
+    name: Test
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ['3.9', '3.10', '3.11', '3.12']
 
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ matrix.python-version }}
-
-    - name: Install KiCad Nightly
+    - name: Install KiCad
       run: |
-        sudo add-apt-repository --yes ppa:kicad/kicad-dev-nightly
+        sudo add-apt-repository --yes ppa:kicad/kicad-9.0-releases
         sudo apt update
-        sudo apt install --install-recommends kicad-nightly
+        sudo apt install --install-recommends kicad
 
     - name: Verify KiCad installation
-      run: kicad-cli-nightly version
+      run: kicad-cli version
 
     - name: Install test dependencies
       run: |
-        pip install --upgrade pytest pytest-cov
+        pip install --upgrade pytest
         pip install -e .
 
     - name: Run tests
       run: pytest tests/
-      env:
-        KICAD_NIGHTLY: "1"
 
   lint:
     name: Lint
