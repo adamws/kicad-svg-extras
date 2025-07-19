@@ -4,7 +4,6 @@
 """Command line interface for net-colored SVG generator."""
 
 import argparse
-import json
 import logging
 import shutil
 import sys
@@ -53,35 +52,6 @@ def main():
         type=Path,
         metavar="CONFIG_FILE",
         help="JSON file with net name to color mapping",
-    )
-    parser.add_argument(
-        "--generate-config",
-        action="store_true",
-        help="Generate a default color configuration file",
-    )
-    parser.add_argument(
-        "--config-output",
-        type=Path,
-        default=Path("net_colors.json"),
-        help="Output file for generated color configuration",
-    )
-    parser.add_argument(
-        "--front-layers",
-        default="B.Cu,F.Cu,F.Silkscreen,Edge.Cuts",
-        help="Layer specification for front side",
-    )
-    parser.add_argument(
-        "--back-layers",
-        default="F.Cu,B.Cu,B.Silkscreen,Edge.Cuts",
-        help="Layer specification for back side",
-    )
-    parser.add_argument(
-        "--list-nets", action="store_true", help="List all nets in the PCB file"
-    )
-    parser.add_argument(
-        "--merge-only",
-        action="store_true",
-        help="Only merge existing per-net SVGs (skip generation)",
     )
     parser.add_argument(
         "--keep-intermediates",
@@ -156,34 +126,9 @@ def main():
         generator = SVGGenerator(
             args.pcb_file, skip_zones=args.skip_zones, kicad_cli_cmd=kicad_cli_cmd
         )
-        generator.set_layers(args.front_layers, args.back_layers)
     except Exception as e:
         logger.error(f"Error initializing SVG generator: {e}")
         sys.exit(1)
-
-    # List nets if requested
-    if args.list_nets:
-        net_names = generator.get_net_names()
-        logger.info("Available nets:")
-        for net_name in sorted(net_names):
-            logger.info(f"  {net_name}")
-        sys.exit(0)
-
-    # Generate default color configuration if requested
-    if args.generate_config:
-        net_names = generator.get_net_names()
-        # Create empty configuration template for user to fill
-        colors = {net_name: "" for net_name in sorted(net_names) if net_name}
-
-        with open(args.config_output, "w") as f:
-            json.dump(colors, f, indent=2)
-
-        logger.info(f"Generated color configuration template: {args.config_output}")
-        logger.info(f"Found {len(net_names)} nets")
-        logger.info(
-            "Please edit the file and add colors for the nets you want to customize."
-        )
-        sys.exit(0)
 
     # Load color configuration with auto-detection
     net_colors_config = {}
@@ -249,30 +194,16 @@ def main():
     for side in sides:
         logger.info(f"Processing {side} side...")
 
-        if not args.merge_only:
-            # Generate color-grouped SVGs for optimization
-            temp_dir = args.output_dir / f"temp_{side}"
-            net_svgs = generator.generate_color_grouped_svgs(
-                side, temp_dir, resolved_net_colors, keep_pcb=args.keep_intermediates
-            )
+        temp_dir = args.output_dir / f"temp_{side}"
+        net_svgs = generator.generate_color_grouped_svgs(
+            side, temp_dir, resolved_net_colors, keep_pcb=args.keep_intermediates
+        )
 
-            unique_svgs = len(set(net_svgs.values()))
-            logger.info(
-                f"Generated {unique_svgs} color-grouped SVGs covering {len(net_svgs)} "
-                f"nets for {side} side"
-            )
-        else:
-            # Look for existing per-net SVGs
-            temp_dir = args.output_dir / f"temp_{side}"
-            net_svgs = {}
-            if temp_dir.exists():
-                for svg_file in temp_dir.glob(f"*_{side}.svg"):
-                    net_name = svg_file.stem.replace(f"_{side}", "")
-                    net_svgs[net_name] = svg_file
-
-            if not net_svgs:
-                logger.info(f"No existing per-net SVGs found for {side} side")
-                continue
+        unique_svgs = len(set(net_svgs.values()))
+        logger.info(
+            f"Generated {unique_svgs} color-grouped SVGs covering {len(net_svgs)} "
+            f"nets for {side} side"
+        )
 
         # Collect unique intermediate SVGs (already colored during generation)
         unique_svgs = list(set(net_svgs.values()))
@@ -320,7 +251,7 @@ def main():
             continue
 
         # Track temp directories for cleanup
-        if not args.merge_only and not args.keep_intermediates:
+        if not args.keep_intermediates:
             temp_dirs_to_cleanup.append(temp_dir)
         elif args.keep_intermediates and temp_dir.exists():
             logger.info(f"Intermediate files kept in: {temp_dir}")
