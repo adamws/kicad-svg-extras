@@ -15,14 +15,14 @@ try:
     import wx
 
     wx.Log.SetLogLevel(wx.LOG_Warning)
-except ImportError:
+except ImportError as err:
     msg = (
         "pcbnew module not available. "
         "This package requires KiCad to be installed with Python bindings. "
         "Please install KiCad and ensure pcbnew is available in your Python "
         "environment."
     )
-    raise ImportError(msg)
+    raise ImportError(msg) from err
 
 logger = logging.getLogger(__name__)
 
