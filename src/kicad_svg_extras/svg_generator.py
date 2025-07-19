@@ -4,12 +4,9 @@
 """SVG generation wrapper around kicad-cli."""
 
 import logging
-import os
 import subprocess
-import tempfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Optional
 
 from kicad_svg_extras.colors import DEFAULT_BACKGROUND_DARK, apply_color_to_svg
 from kicad_svg_extras.pcb_net_filter import PCBNetFilter
@@ -32,18 +29,9 @@ class SVGGenerator:
         self.skip_zones = skip_zones
         self.kicad_cli_cmd = kicad_cli_cmd
 
-        # Default layers for front and back
-        self.front_layers = "B.Cu,F.Cu,F.Silkscreen,Edge.Cuts"
-        self.back_layers = "F.Cu,B.Cu,B.Silkscreen,Edge.Cuts"
-
         # SVG namespace
         self.svg_ns = "http://www.w3.org/2000/svg"
         ET.register_namespace("", self.svg_ns)
-
-    def set_layers(self, front_layers: str, back_layers: str) -> None:
-        """Set custom layer specifications."""
-        self.front_layers = front_layers
-        self.back_layers = back_layers
 
     def _run_kicad_cli_svg(
         self, pcb_file: Path, layers: str, output_file: Path
@@ -109,90 +97,6 @@ class SVGGenerator:
 
         with open(svg_file, "w") as f:
             f.write(content)
-
-    def generate_standard_svg(self, side: str, output_file: Path) -> None:
-        """Generate standard SVG for front or back side."""
-        layers = self.front_layers if side == "front" else self.back_layers
-        self._run_kicad_cli_svg(self.pcb_file, layers, output_file)
-        self._post_process_svg(output_file)
-
-    def generate_net_svg(
-        self,
-        net_name: str,
-        side: str,
-        output_file: Optional[Path] = None,
-        *,
-        keep_pcb: bool = False,
-    ) -> Path:
-        """Generate SVG for a specific net."""
-        if output_file is None:
-            fd, temp_path = tempfile.mkstemp(suffix=".svg")
-            os.close(fd)
-            output_file = Path(temp_path)
-
-        # Create temporary PCB with only this net
-        if keep_pcb:
-            # Save to output directory with descriptive name
-            safe_name = net_name.replace("/", "_").replace("\\", "_")
-            temp_pcb = output_file.parent / f"{safe_name}_{side}.kicad_pcb"
-        else:
-            temp_pcb = self.net_filter.create_single_net_pcb(net_name)
-
-        temp_pcb = self.net_filter.create_single_net_pcb(net_name, temp_pcb)
-
-        try:
-            # For intermediate files, use only copper layers
-            if keep_pcb:
-                layers = "F.Cu" if side == "front" else "B.Cu"
-            else:
-                layers = self.front_layers if side == "front" else self.back_layers
-
-            self._run_kicad_cli_svg(temp_pcb, layers, output_file)
-            # Don't add background to intermediate SVGs
-            self._post_process_svg(output_file, add_background=False)
-        finally:
-            # Clean up temporary PCB only if not keeping it
-            if not keep_pcb and temp_pcb.exists():
-                temp_pcb.unlink()
-
-        return output_file
-
-    def generate_all_net_svgs(
-        self, side: str, output_dir: Path, *, keep_pcb: bool = False
-    ) -> dict[str, Path]:
-        """Generate SVGs for all nets."""
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        net_svgs = {}
-        net_names = self.net_filter.get_net_names()
-
-        for net_name in net_names:
-            # Create safe filename
-            if net_name:
-                safe_name = net_name.replace("/", "_").replace("\\", "_")
-            else:
-                safe_name = "<no_net>"
-            output_file = output_dir / f"{safe_name}_{side}.svg"
-
-            # Skip nets with no elements on this side
-            if not self.net_filter.has_elements_on_side(net_name or "<no_net>", side):
-                logger.info(
-                    "Skipping net '%s' on %s side (no elements found)",
-                    net_name or "<no_net>",
-                    side,
-                )
-                continue
-
-            try:
-                self.generate_net_svg(net_name, side, output_file, keep_pcb=keep_pcb)
-                net_svgs[net_name] = output_file
-            except Exception as e:
-                logger.warning(
-                    f"Warning: Failed to generate SVG for net '{net_name}': {e}"
-                )
-                continue
-
-        return net_svgs
 
     def generate_color_grouped_svgs(
         self,
