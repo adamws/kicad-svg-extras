@@ -193,6 +193,25 @@ def create_filtered_pcb(
     for zone in zones_to_remove:
         new_board.RemoveNative(zone)
 
+    # Remove drawings (text, shapes) on copper layers unless processing no-net
+    # Text elements don't have nets, so they should only appear in no-net SVG
+    drawings_to_remove = []
+    processing_no_net = "<no_net>" in net_names
+
+    for drawing in new_board.GetDrawings():
+        # Check if drawing is on a copper layer
+        drawing_layer = drawing.GetLayer()
+        is_on_copper = drawing_layer in (pcbnew.F_Cu, pcbnew.B_Cu) or (
+            drawing_layer >= pcbnew.In1_Cu and drawing_layer <= pcbnew.In30_Cu
+        )
+
+        if is_on_copper and not processing_no_net:
+            # Remove drawings on copper layers unless we're processing no-net
+            drawings_to_remove.append(drawing)
+
+    for drawing in drawings_to_remove:
+        new_board.RemoveNative(drawing)
+
     # Save the modified board
     new_board.Save(str(output_file))
 
