@@ -104,23 +104,28 @@ def main():
 
     args = parser.parse_args()
 
-    logging.basicConfig(level=getattr(logging, args.log_level.upper()))
+    # Configure clean logging for CLI application
+    logging.basicConfig(
+        level=getattr(logging, args.log_level.upper()),
+        format="%(levelname)s: %(message)s",
+        datefmt="%H:%M:%S",
+    )
 
     # Validate inputs for SVG generation
     if not args.pcb_file:
-        logger.info("Error: PCB file is required for SVG generation")
+        logger.error("PCB file is required for SVG generation")
         sys.exit(1)
 
     if not args.output_dir:
-        logger.info("Error: Output directory is required for SVG generation")
+        logger.error("Output directory is required for SVG generation")
         sys.exit(1)
 
     if not args.pcb_file.exists():
-        logger.info(f"Error: PCB file not found: {args.pcb_file}")
+        logger.error(f"PCB file not found: {args.pcb_file}")
         sys.exit(1)
 
     if not args.pcb_file.suffix == ".kicad_pcb":
-        logger.info("Error: Input file must be a .kicad_pcb file")
+        logger.error("Input file must be a .kicad_pcb file")
         sys.exit(1)
 
     # Initialize kicad CLI command
@@ -133,7 +138,7 @@ def main():
     if args.colors:
         # User specified a color file
         if not args.colors.exists():
-            logger.info(f"Error: Color configuration file not found: {args.colors}")
+            logger.error(f"Color configuration file not found: {args.colors}")
             sys.exit(1)
         color_source = args.colors
     else:
@@ -220,7 +225,7 @@ def main():
                 all_svgs_to_merge.append(edge_svg)
                 logger.info(f"Generated edge cuts SVG: {edge_svg.name}")
             except Exception as e:
-                logger.warning(f"Warning: Failed to generate edge cuts SVG: {e}")
+                logger.warning(f"Failed to generate edge cuts SVG: {e}")
 
         # Layer 2: Copper layers (middle)
         all_svgs_to_merge.extend(unique_svgs)
@@ -248,7 +253,7 @@ def main():
             all_side_svgs.append(side_output_file)
 
         except Exception as e:
-            logger.info(f"Error creating colored SVG for {side} side: {e}")
+            logger.error(f"Error creating colored SVG for {side} side: {e}")
             continue
 
         # Track temp directories for cleanup
@@ -274,7 +279,7 @@ def main():
                     side_svg.unlink()
 
         except Exception as e:
-            logger.info(f"Error merging sides: {e}")
+            logger.error(f"Error merging sides: {e}")
             logger.info("Individual side files have been kept.")
 
     # Clean up temporary files

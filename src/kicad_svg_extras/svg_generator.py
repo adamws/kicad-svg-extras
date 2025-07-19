@@ -145,7 +145,7 @@ def generate_color_grouped_svgs(
                 net_svgs[net_name] = default_svg
 
         except Exception as e:
-            logger.warning(f"Warning: Failed to generate SVG for default nets: {e}")
+            logger.warning(f"Failed to generate SVG for default nets: {e}")
         finally:
             if not keep_pcb and temp_pcb.exists():
                 temp_pcb.unlink()
@@ -180,7 +180,7 @@ def generate_color_grouped_svgs(
                 net_svgs[net_name] = color_svg
 
         except Exception as e:
-            msg = f"Warning: Failed to generate SVG for color {color}: {e}"
+            msg = f"Failed to generate SVG for color {color}: {e}"
             logger.warning(msg)
         finally:
             if not keep_pcb and temp_pcb.exists():
