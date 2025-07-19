@@ -4,138 +4,22 @@
 """Command line interface for net-colored SVG generator."""
 
 import argparse
-import fnmatch
 import json
 import logging
-import re
 import shutil
 import sys
 from pathlib import Path
-from typing import Optional, cast
+from typing import Optional
 
+from kicad_svg_extras.colors import (
+    DEFAULT_BACKGROUND_LIGHT,
+    load_color_config,
+    resolve_net_color,
+)
 from kicad_svg_extras.svg_generator import SVGGenerator
 from kicad_svg_extras.svg_processor import SVGProcessor
 
 logger = logging.getLogger(__name__)
-
-
-def load_color_config(config_file: Path) -> dict[str, str]:
-    """Load net color configuration from JSON file."""
-    with open(config_file) as f:
-        return cast(dict[str, str], json.load(f))
-
-
-def parse_color_value(color_value: str) -> str:
-    """Parse various color formats and convert to hex format."""
-    color_value = color_value.strip()
-
-    # Already hex format: #RRGGBB or #RRGGBBAA
-    if re.match(r"^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$", color_value):
-        return color_value.upper()[:7]  # Return only RGB part, uppercase
-
-    # RGB format: rgb(255, 0, 255) or rgba(255, 0, 255, 1.0)
-    rgb_match = re.match(
-        r"^rgba?\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*[\d.]+)?\s*\)$",
-        color_value,
-    )
-    if rgb_match:
-        r, g, b = [int(val) for val in rgb_match.groups()]
-        return f"#{r:02X}{g:02X}{b:02X}"
-
-    # HSL format: hsl(300, 100%, 50%)
-    hsl_match = re.match(
-        r"^hsl\s*\(\s*(\d+)\s*,\s*(\d+)%\s*,\s*(\d+)%\s*\)$", color_value
-    )
-    if hsl_match:
-        h, s, l = [int(val) for val in hsl_match.groups()]  # noqa: E741
-        # Simple HSL to RGB conversion
-        h_norm = h / 360.0
-        s_norm = s / 100.0
-        l_norm = l / 100.0
-
-        def hsl_to_rgb(h, s, l):  # noqa: E741
-            if s == 0:
-                r = g = b = l
-            else:
-
-                def hue_to_rgb(p, q, t):
-                    if t < 0:
-                        t += 1
-                    if t > 1:
-                        t -= 1
-                    if t < 1 / 6:
-                        return p + (q - p) * 6 * t
-                    if t < 1 / 2:
-                        return q
-                    if t < 2 / 3:
-                        return p + (q - p) * (2 / 3 - t) * 6
-                    return p
-
-                q = l * (1 + s) if l < 0.5 else l + s - l * s  # noqa: PLR2004
-                p = 2 * l - q
-                r = hue_to_rgb(p, q, h + 1 / 3)
-                g = hue_to_rgb(p, q, h)
-                b = hue_to_rgb(p, q, h - 1 / 3)
-            return r, g, b
-
-        r, g, b = hsl_to_rgb(h_norm, s_norm, l_norm)
-        return f"#{int(r*255):02X}{int(g*255):02X}{int(b*255):02X}"
-
-    # Named colors (basic set)
-    named_colors = {
-        "red": "#FF0000",
-        "green": "#008000",
-        "blue": "#0000FF",
-        "yellow": "#FFFF00",
-        "cyan": "#00FFFF",
-        "magenta": "#FF00FF",
-        "black": "#000000",
-        "white": "#FFFFFF",
-        "gray": "#808080",
-        "orange": "#FFA500",
-        "purple": "#800080",
-        "brown": "#A52A2A",
-    }
-
-    if color_value.lower() in named_colors:
-        return named_colors[color_value.lower()]
-
-    # If we can't parse it, return as-is and warn
-    logger.warning(f"Could not parse color format: '{color_value}', using as-is")
-    return color_value
-
-
-def load_flexible_colors(config_source: Path) -> dict[str, str]:
-    """Load colors from various file formats with flexible parsing."""
-    with open(config_source) as f:
-        data = json.load(f)
-
-    # Try to find net_colors in various locations
-    net_colors_raw = None
-
-    # Option 1: KiCad project format with net_settings.net_colors
-    if "net_settings" in data and "net_colors" in data["net_settings"]:
-        net_colors_raw = data["net_settings"]["net_colors"]
-
-    # Option 2: Our custom format with top-level net_colors
-    elif "net_colors" in data:
-        net_colors_raw = data["net_colors"]
-
-    # Option 3: Legacy format - direct net name to color mapping
-    else:
-        net_colors_raw = data
-
-    # Parse all color values to hex format
-    converted_colors = {}
-    for net_name, color_value in net_colors_raw.items():
-        if isinstance(color_value, str) and color_value.strip():
-            converted_colors[net_name] = parse_color_value(color_value)
-        else:
-            logger.warning(
-                f"Skipping invalid color value for net '{net_name}': {color_value}"
-            )
-
-    return converted_colors
 
 
 def find_kicad_pro_file(pcb_file: Path) -> Optional[Path]:
@@ -143,32 +27,6 @@ def find_kicad_pro_file(pcb_file: Path) -> Optional[Path]:
     pro_file = pcb_file.with_suffix(".kicad_pro")
     if pro_file.exists():
         return pro_file
-    return None
-
-
-def get_color_for_net(
-    net_name: str, net_colors_config: dict[str, str]
-) -> Optional[str]:
-    """Get the color for a given net name, supporting wildcards."""
-    # Only apply colors if user provided configuration
-    if not net_colors_config:
-        return None
-
-    # Exact match first
-    if net_name in net_colors_config:
-        return net_colors_config[net_name]
-
-    # Wildcard matches
-    # Sort patterns by specificity (longer patterns first)
-    sorted_patterns = sorted(net_colors_config.keys(), key=len, reverse=True)
-    for pattern in sorted_patterns:
-        if (
-            "*" in pattern or "?" in pattern or "[" in pattern
-        ):  # Check if it's a wildcard pattern
-            if fnmatch.fnmatch(net_name, pattern):
-                return net_colors_config[pattern]
-
-    # No user-defined color found
     return None
 
 
@@ -238,7 +96,7 @@ def main():
     parser.add_argument(
         "--background-color",
         type=str,
-        default="#FFFFFF",
+        default=DEFAULT_BACKGROUND_LIGHT,
         help="Background color for the output SVGs (default: #FFFFFF)",
     )
     parser.add_argument(
@@ -350,7 +208,7 @@ def main():
 
     if color_source:
         try:
-            net_colors_config = load_flexible_colors(color_source)
+            net_colors_config = load_color_config(color_source)
             if net_colors_config:
                 logger.info(
                     f"Loaded {len(net_colors_config)} net color(s) from: {color_source}"
@@ -366,7 +224,7 @@ def main():
     # Resolve colors for nets with user-provided configuration only
     resolved_net_colors = {}
     for net_name in net_names:
-        color = get_color_for_net(net_name, net_colors_config)
+        color = resolve_net_color(net_name, net_colors_config)
         if color:  # Only include nets with user-defined colors
             resolved_net_colors[net_name] = color
             logger.debug(f"Resolved color for net '{net_name}': {color}")

@@ -8,6 +8,11 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Optional
 
+from kicad_svg_extras.colors import (
+    DEFAULT_BACKGROUND_DARK,
+    apply_color_to_svg,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -18,84 +23,6 @@ class SVGProcessor:
         self.svg_ns = "http://www.w3.org/2000/svg"
         ET.register_namespace("", self.svg_ns)
 
-    def _find_copper_color(self, svg_file: Path) -> Optional[str]:
-        """Find the copper color used in the SVG."""
-        tree = ET.parse(svg_file)
-        root = tree.getroot()
-
-        # Look for copper-specific colors (avoid black/white which are backgrounds
-        # or holes)
-        copper_colors = []
-
-        # Look for colors in both groups and paths
-        for element in root.findall(f".//{{{self.svg_ns}}}g") + root.findall(
-            f".//{{{self.svg_ns}}}path"
-        ):
-            style = element.attrib.get("style", "")
-            if "fill:" in style:
-                # Extract fill color from style
-                fill_start = style.find("fill:") + 5
-                fill_end = style.find(";", fill_start)
-                if fill_end == -1:
-                    fill_end = len(style)
-                color = style[fill_start:fill_end].strip()
-                if color.startswith("#") and len(color) == 7:  # noqa: PLR2004
-                    # Skip common non-copper colors
-                    if color.upper() not in ["#000000", "#FFFFFF"]:
-                        copper_colors.append(color)
-
-            # Also check fill attribute
-            fill = element.attrib.get("fill", "")
-            if fill.startswith("#") and len(fill) == 7:  # noqa: PLR2004
-                # Skip common non-copper colors
-                if fill.upper() not in ["#000000", "#FFFFFF"]:
-                    copper_colors.append(fill)
-
-        # Return the first copper color found, or the default KiCad copper color
-        if copper_colors:
-            return copper_colors[0]
-
-        return None
-
-    def change_svg_color(
-        self,
-        svg_file: Path,
-        old_color: str,
-        new_color: str,
-        output_file: Optional[Path] = None,
-    ) -> Path:
-        """Change all instances of old_color to new_color in SVG."""
-        if output_file is None:
-            output_file = svg_file
-
-        # Read SVG as text for simple color replacement
-        with open(svg_file) as f:
-            content = f.read()
-
-        # Replace colors in various formats
-        content = content.replace(old_color.upper(), new_color.upper())
-        content = content.replace(old_color.lower(), new_color.lower())
-
-        # Also handle RGB format if needed
-        if old_color.startswith("#") and len(old_color) == 7:  # noqa: PLR2004
-            # Convert hex to RGB values
-            r = int(old_color[1:3], 16)
-            g = int(old_color[3:5], 16)
-            b = int(old_color[5:7], 16)
-            rgb_old = f"rgb({r},{g},{b})"
-
-            if new_color.startswith("#") and len(new_color) == 7:  # noqa: PLR2004
-                r_new = int(new_color[1:3], 16)
-                g_new = int(new_color[3:5], 16)
-                b_new = int(new_color[5:7], 16)
-                rgb_new = f"rgb({r_new},{g_new},{b_new})"
-                content = content.replace(rgb_old, rgb_new)
-
-        with open(output_file, "w") as f:
-            f.write(content)
-
-        return output_file
-
     def apply_net_color(
         self, svg_file: Path, net_color: str, output_file: Optional[Path] = None
     ) -> Path:
@@ -103,21 +30,9 @@ class SVGProcessor:
         if output_file is None:
             output_file = svg_file
 
-        # Find the current copper color
-        current_color = self._find_copper_color(svg_file)
-
-        if current_color:
-            logger.debug(f"Recoloring net SVG from {current_color} to {net_color}")
-            return self.change_svg_color(
-                svg_file, current_color, net_color, output_file
-            )
-        else:
-            logger.debug(
-                "No specific copper color found, defaulting to #C83434 and "
-                f"recoloring to {net_color}"
-            )
-            # Default copper color if not found
-            return self.change_svg_color(svg_file, "#C83434", net_color, output_file)
+        # Use the unified color application function from colors module
+        apply_color_to_svg(svg_file, net_color, output_file)
+        return output_file
 
     def get_svg_dimensions(self, svg_file: Path) -> tuple[str, str]:
         """Get SVG width and height."""
@@ -203,7 +118,7 @@ class SVGProcessor:
             if start != -1 and end != -1:
                 group_content = content[start:end]
                 # Skip background rectangles
-                if 'fill="#282A36"' not in group_content:
+                if f'fill="{DEFAULT_BACKGROUND_DARK}"' not in group_content:
                     svg_content += group_content + "\n"
 
         svg_content += "</svg>"

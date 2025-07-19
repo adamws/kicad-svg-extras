@@ -11,8 +11,8 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Optional
 
+from kicad_svg_extras.colors import DEFAULT_BACKGROUND_DARK, apply_color_to_svg
 from kicad_svg_extras.pcb_net_filter import PCBNetFilter
-from kicad_svg_extras.svg_processor import SVGProcessor
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +90,12 @@ class SVGGenerator:
 
                 # Add dark background
                 rect = ET.Element(
-                    "rect", x="0", y="0", width=svg_w, height=svg_h, fill="#282A36"
+                    "rect",
+                    x="0",
+                    y="0",
+                    width=svg_w,
+                    height=svg_h,
+                    fill=DEFAULT_BACKGROUND_DARK,
                 )
                 parent.insert(desc_index + 1, rect)
 
@@ -263,8 +268,7 @@ class SVGGenerator:
                 self._post_process_svg(raw_svg, add_background=False)
 
                 # Apply color to the intermediate SVG immediately
-                processor = SVGProcessor()
-                processor.apply_net_color(raw_svg, color, color_svg)
+                apply_color_to_svg(raw_svg, color, color_svg)
 
                 # Clean up raw SVG if not keeping intermediates
                 if not keep_pcb and raw_svg.exists():
