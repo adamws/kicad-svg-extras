@@ -10,13 +10,16 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+from kicad_svg_extras import svg_generator
 from kicad_svg_extras.colors import (
     DEFAULT_BACKGROUND_LIGHT,
     load_color_config,
     resolve_net_color,
 )
-from kicad_svg_extras.svg_generator import SVGGenerator
-from kicad_svg_extras.svg_processor import SVGProcessor
+from kicad_svg_extras.svg_processor import (
+    add_background_to_svg,
+    merge_svg_files,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -120,15 +123,8 @@ def main():
         logger.info("Error: Input file must be a .kicad_pcb file")
         sys.exit(1)
 
-    # Initialize generator
-    try:
-        kicad_cli_cmd = "kicad-cli-nightly" if args.nightly else "kicad-cli"
-        generator = SVGGenerator(
-            args.pcb_file, skip_zones=args.skip_zones, kicad_cli_cmd=kicad_cli_cmd
-        )
-    except Exception as e:
-        logger.error(f"Error initializing SVG generator: {e}")
-        sys.exit(1)
+    # Initialize kicad CLI command
+    kicad_cli_cmd = "kicad-cli-nightly" if args.nightly else "kicad-cli"
 
     # Load color configuration with auto-detection
     net_colors_config = {}
@@ -164,7 +160,7 @@ def main():
             logger.error(f"Error loading color configuration from {color_source}: {e}")
             sys.exit(1)
 
-    net_names = generator.get_net_names()
+    net_names = svg_generator.get_net_names(args.pcb_file)
 
     # Resolve colors for nets with user-provided configuration only
     resolved_net_colors = {}
@@ -181,9 +177,6 @@ def main():
     # Create output directory
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Initialize processor
-    processor = SVGProcessor()
-
     # Process each side
     sides = ["front", "back"] if args.side == "both" else [args.side]
 
@@ -195,8 +188,14 @@ def main():
         logger.info(f"Processing {side} side...")
 
         temp_dir = args.output_dir / f"temp_{side}"
-        net_svgs = generator.generate_color_grouped_svgs(
-            side, temp_dir, resolved_net_colors, keep_pcb=args.keep_intermediates
+        net_svgs = svg_generator.generate_color_grouped_svgs(
+            args.pcb_file,
+            side,
+            temp_dir,
+            resolved_net_colors,
+            keep_pcb=args.keep_intermediates,
+            kicad_cli_cmd=kicad_cli_cmd,
+            skip_zones=args.skip_zones,
         )
 
         unique_svgs = len(set(net_svgs.values()))
@@ -215,7 +214,9 @@ def main():
         if args.with_edge:
             edge_svg = temp_dir / f"edge_cuts_{side}.svg"
             try:
-                generator.generate_edge_cuts_svg(edge_svg)
+                svg_generator.generate_edge_cuts_svg(
+                    args.pcb_file, edge_svg, kicad_cli_cmd
+                )
                 all_svgs_to_merge.append(edge_svg)
                 logger.info(f"Generated edge cuts SVG: {edge_svg.name}")
             except Exception as e:
@@ -228,7 +229,9 @@ def main():
         if args.with_silkscreen:
             silkscreen_svg = temp_dir / f"silkscreen_{side}.svg"
             try:
-                generator.generate_silkscreen_svg(side, silkscreen_svg)
+                svg_generator.generate_silkscreen_svg(
+                    args.pcb_file, side, silkscreen_svg, kicad_cli_cmd
+                )
                 all_svgs_to_merge.append(silkscreen_svg)
                 logger.info(f"Generated silkscreen SVG: {silkscreen_svg.name}")
             except Exception as e:
@@ -238,9 +241,9 @@ def main():
         side_output_file = args.output_dir / f"{side}_colored.svg"
 
         try:
-            processor.merge_svg_files(all_svgs_to_merge, side_output_file)
+            merge_svg_files(all_svgs_to_merge, side_output_file)
             if not args.no_background:
-                processor._add_background_to_svg(
+                add_background_to_svg(
                     side_output_file, args.background_color
                 )
             logger.info(f"Created colored SVG: {side_output_file}")
@@ -262,9 +265,9 @@ def main():
         logger.info(f"Merging both sides into: {merged_output}")
 
         try:
-            processor.merge_svg_files(all_side_svgs, merged_output)
+            merge_svg_files(all_side_svgs, merged_output)
             if not args.no_background:
-                processor._add_background_to_svg(merged_output, args.background_color)
+                add_background_to_svg(merged_output, args.background_color)
             logger.info(f"Created merged SVG: {merged_output}")
 
             # Remove individual side files if merge was successful

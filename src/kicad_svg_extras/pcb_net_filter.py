@@ -46,192 +46,207 @@ except ImportError:
 
     pcbnew = MockPcbnew()
     wx = None
+
 logger = logging.getLogger(__name__)
 
 
-class PCBNetFilter:
-    """Filter PCB elements by net name using pcbnew API."""
+def _ensure_pcbnew_available() -> None:
+    """Ensure pcbnew is available or raise ImportError."""
+    if not PCBNEW_AVAILABLE:
+        msg = (
+            "pcbnew module not available. "
+            "This package requires KiCad to be installed with Python bindings. "
+            "For testing without KiCad, set KICAD_MOCK=1 environment variable."
+        )
+        raise ImportError(msg)
 
-    def __init__(self, pcb_file: Path, *, skip_zones: bool = False):
-        if not PCBNEW_AVAILABLE:
-            msg = (
-                "pcbnew module not available. "
-                "This package requires KiCad to be installed with Python bindings. "
-                "For testing without KiCad, set KICAD_MOCK=1 environment variable."
-            )
-            raise ImportError(msg)
-        self.pcb_file = pcb_file
-        self.board = pcbnew.LoadBoard(str(pcb_file))
-        self.net_codes = self._get_net_codes()
-        self.skip_zones = skip_zones
 
-    def _get_net_codes(self) -> dict[str, int]:
-        """Get mapping of net name to net code."""
-        net_codes = {}
-        netlist = self.board.GetNetInfo()
-        for net_code in range(netlist.GetNetCount()):
-            net_info = netlist.GetNetItem(net_code)
-            if net_info:
-                net_name = net_info.GetNetname()
-                net_codes[net_name] = net_code
-        net_codes["<no_net>"] = 0  # Use net code 0 for no net
-        return net_codes
+def load_board(pcb_file: Path):
+    """Load a PCB board from file."""
+    _ensure_pcbnew_available()
+    return pcbnew.LoadBoard(str(pcb_file))
 
-    def get_net_names(self) -> list[str]:
-        """Get all net names in the PCB."""
-        return list(self.net_codes.keys())
 
-    def get_tracks_for_net(self, net_name: str) -> list[pcbnew.PCB_TRACK]:
-        """Get all tracks for a specific net."""
-        if net_name not in self.net_codes:
-            return []
+def get_net_codes(board) -> dict[str, int]:
+    """Get mapping of net name to net code from board."""
+    net_codes = {}
+    netlist = board.GetNetInfo()
+    for net_code in range(netlist.GetNetCount()):
+        net_info = netlist.GetNetItem(net_code)
+        if net_info:
+            net_name = net_info.GetNetname()
+            net_codes[net_name] = net_code
+    net_codes["<no_net>"] = 0  # Use net code 0 for no net
+    return net_codes
 
-        net_code = self.net_codes[net_name]
-        tracks = []
 
-        for track in self.board.GetTracks():
-            if track.GetNetCode() == net_code:
-                tracks.append(track)
+def get_net_names(pcb_file: Path) -> list[str]:
+    """Get all net names in the PCB."""
+    board = load_board(pcb_file)
+    net_codes = get_net_codes(board)
+    return list(net_codes.keys())
 
-        return tracks
 
-    def get_vias_for_net(self, net_name: str) -> list[pcbnew.PCB_VIA]:
-        """Get all vias for a specific net."""
-        if net_name not in self.net_codes:
-            return []
+def get_tracks_for_net(board, net_name: str, net_codes: dict[str, int]) -> list:
+    """Get all tracks for a specific net."""
+    if net_name not in net_codes:
+        return []
 
-        net_code = self.net_codes[net_name]
-        vias = []
+    net_code = net_codes[net_name]
+    tracks = []
 
-        for track in self.board.GetTracks():
-            if isinstance(track, pcbnew.PCB_VIA) and track.GetNetCode() == net_code:
-                vias.append(track)
+    for track in board.GetTracks():
+        if track.GetNetCode() == net_code:
+            tracks.append(track)
 
-        return vias
+    return tracks
 
-    def get_pads_for_net(self, net_name: str) -> list[pcbnew.PAD]:
-        """Get all pads for a specific net."""
-        if net_name not in self.net_codes:
-            return []
 
-        net_code = self.net_codes[net_name]
-        pads = []
+def get_vias_for_net(board, net_name: str, net_codes: dict[str, int]) -> list:
+    """Get all vias for a specific net."""
+    if net_name not in net_codes:
+        return []
 
-        for footprint in self.board.GetFootprints():
-            for pad in footprint.Pads():
-                if pad.GetNetCode() == net_code:
-                    pads.append(pad)
+    net_code = net_codes[net_name]
+    vias = []
 
-        return pads
+    for track in board.GetTracks():
+        if isinstance(track, pcbnew.PCB_VIA) and track.GetNetCode() == net_code:
+            vias.append(track)
 
-    def has_elements_on_side(self, net_name: str, side: str) -> bool:
-        """Check if a net has any tracks, pads, or vias on a given side."""
-        if net_name not in self.net_codes:
-            return False
+    return vias
 
-        net_code = self.net_codes[net_name]
-        cu_layer = pcbnew.F_Cu if side == "front" else pcbnew.B_Cu
 
-        # Check for tracks and vias on the specified side
-        for track in self.board.GetTracks():
-            if track.GetNetCode() == net_code and track.IsOnLayer(cu_layer):
-                return True
+def get_pads_for_net(board, net_name: str, net_codes: dict[str, int]) -> list:
+    """Get all pads for a specific net."""
+    if net_name not in net_codes:
+        return []
 
-        # Check for pads on the specified side
-        for footprint in self.board.GetFootprints():
-            for pad in footprint.Pads():
-                if pad.GetNetCode() == net_code and pad.IsOnLayer(cu_layer):
-                    return True
+    net_code = net_codes[net_name]
+    pads = []
 
+    for footprint in board.GetFootprints():
+        for pad in footprint.Pads():
+            if pad.GetNetCode() == net_code:
+                pads.append(pad)
+
+    return pads
+
+
+def has_elements_on_side(
+    board, net_name: str, side: str, net_codes: dict[str, int]
+) -> bool:
+    """Check if a net has any tracks, pads, or vias on a given side."""
+    if net_name not in net_codes:
         return False
 
-    def create_filtered_pcb(self, net_names: set[str], output_file: Path) -> None:
-        """Create a new PCB file with only the specified nets."""
-        # Create a copy of the board by copying the original file first
-        shutil.copy2(self.pcb_file, output_file)
+    net_code = net_codes[net_name]
+    cu_layer = pcbnew.F_Cu if side == "front" else pcbnew.B_Cu
 
-        # Load the copied board
-        new_board = pcbnew.LoadBoard(str(output_file))
+    # Check for tracks and vias on the specified side
+    for track in board.GetTracks():
+        if track.GetNetCode() == net_code and track.IsOnLayer(cu_layer):
+            return True
 
-        # Get net codes to keep
-        net_codes_to_keep = {
-            self.net_codes[net_name]
-            for net_name in net_names
-            if net_name in self.net_codes
-        }
+    # Check for pads on the specified side
+    for footprint in board.GetFootprints():
+        for pad in footprint.Pads():
+            if pad.GetNetCode() == net_code and pad.IsOnLayer(cu_layer):
+                return True
 
-        # Remove tracks and vias not in specified nets
-        tracks_to_remove = []
-        for track in new_board.GetTracks():
-            if track.GetNetCode() not in net_codes_to_keep:
-                tracks_to_remove.append(track)
+    return False
 
-        for track in tracks_to_remove:
-            new_board.RemoveNative(track)
 
-        # Remove footprints that have no pads with specified nets, and remove pads
-        # not in specified nets
-        footprints_to_remove = []
-        for footprint in new_board.GetFootprints():
-            # Check if this footprint has any pads with the specified nets
-            has_matching_pads = False
-            pads_to_remove = []
+def create_filtered_pcb(
+    pcb_file: Path,
+    net_names: set[str],
+    output_file: Path,
+    *,
+    skip_zones: bool = False,
+) -> None:
+    """Create a new PCB file with only the specified nets."""
+    _ensure_pcbnew_available()
 
-            for pad in footprint.Pads():
-                if pad.GetNetCode() in net_codes_to_keep:
-                    has_matching_pads = True
-                else:
-                    pads_to_remove.append(pad)
+    # Create a copy of the board by copying the original file first
+    shutil.copy2(pcb_file, output_file)
 
-            if has_matching_pads:
-                # Remove pads that don't match the specified nets
-                for pad in pads_to_remove:
-                    footprint.RemoveNative(pad)
+    # Load the copied board
+    new_board = pcbnew.LoadBoard(str(output_file))
+
+    # Get net codes from original board
+    original_board = load_board(pcb_file)
+    net_codes = get_net_codes(original_board)
+
+    # Get net codes to keep
+    net_codes_to_keep = {
+        net_codes[net_name] for net_name in net_names if net_name in net_codes
+    }
+
+    # Remove tracks and vias not in specified nets
+    tracks_to_remove = []
+    for track in new_board.GetTracks():
+        if track.GetNetCode() not in net_codes_to_keep:
+            tracks_to_remove.append(track)
+
+    for track in tracks_to_remove:
+        new_board.RemoveNative(track)
+
+    # Remove footprints that have no pads with specified nets, and remove pads
+    # not in specified nets
+    footprints_to_remove = []
+    for footprint in new_board.GetFootprints():
+        # Check if this footprint has any pads with the specified nets
+        has_matching_pads = False
+        pads_to_remove = []
+
+        for pad in footprint.Pads():
+            if pad.GetNetCode() in net_codes_to_keep:
+                has_matching_pads = True
             else:
-                # Remove the entire footprint if it has no matching pads
-                footprints_to_remove.append(footprint)
+                pads_to_remove.append(pad)
 
-        # Remove footprints with no matching pads
-        for footprint in footprints_to_remove:
-            new_board.RemoveNative(footprint)
-
-        # Remove zones not matching specified nets
-        if self.skip_zones:
-            zones_to_remove = list(new_board.Zones())
+        if has_matching_pads:
+            # Remove pads that don't match the specified nets
+            for pad in pads_to_remove:
+                footprint.RemoveNative(pad)
         else:
-            zones_to_remove = []
-            for zone in new_board.Zones():
-                if zone.GetNetCode() not in net_codes_to_keep:
-                    zones_to_remove.append(zone)
+            # Remove the entire footprint if it has no matching pads
+            footprints_to_remove.append(footprint)
 
-        for zone in zones_to_remove:
-            new_board.RemoveNative(zone)
+    # Remove footprints with no matching pads
+    for footprint in footprints_to_remove:
+        new_board.RemoveNative(footprint)
 
-        # Save the modified board
-        new_board.Save(str(output_file))
+    # Remove zones not matching specified nets
+    if skip_zones:
+        zones_to_remove = list(new_board.Zones())
+    else:
+        zones_to_remove = []
+        for zone in new_board.Zones():
+            if zone.GetNetCode() not in net_codes_to_keep:
+                zones_to_remove.append(zone)
 
-    def create_single_net_pcb(
-        self, net_name: str, output_file: Optional[Path] = None
-    ) -> Path:
-        """Create a PCB file with only one net."""
-        if output_file is None:
-            # Create temporary file
-            fd, temp_path = tempfile.mkstemp(suffix=".kicad_pcb")
-            os.close(fd)
-            output_file = Path(temp_path)
+    for zone in zones_to_remove:
+        new_board.RemoveNative(zone)
 
-        self.create_filtered_pcb({net_name}, output_file)
-        return output_file
+    # Save the modified board
+    new_board.Save(str(output_file))
 
-    def create_multi_net_pcb(
-        self, net_names: list[str], output_file: Optional[Path] = None
-    ) -> Path:
-        """Create a PCB file with multiple specified nets."""
-        if output_file is None:
-            # Create temporary file
-            fd, temp_path = tempfile.mkstemp(suffix=".kicad_pcb")
-            os.close(fd)
-            output_file = Path(temp_path)
 
-        self.create_filtered_pcb(set(net_names), output_file)
-        return output_file
+def create_multi_net_pcb(
+    pcb_file: Path,
+    net_names: list[str],
+    output_file: Optional[Path] = None,
+    *,
+    skip_zones: bool = False,
+) -> Path:
+    """Create a PCB file with multiple specified nets."""
+    if output_file is None:
+        # Create temporary file
+        fd, temp_path = tempfile.mkstemp(suffix=".kicad_pcb")
+        os.close(fd)
+        output_file = Path(temp_path)
+
+    create_filtered_pcb(pcb_file, set(net_names), output_file, skip_zones=skip_zones)
+    return output_file
+
