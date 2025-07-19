@@ -77,6 +77,15 @@ def main():
         ),
     )
     parser.add_argument(
+        "--use-css-classes",
+        action="store_true",
+        help=(
+            "Use CSS classes for styling instead of hardcoded colors. "
+            "Generates individual SVG per net (slower) but allows easy "
+            "color customization via CSS. Classes: .net-<name> { fill: color; }"
+        ),
+    )
+    parser.add_argument(
         "--keep-intermediates",
         action="store_true",
         help="Keep intermediate files for debugging",
@@ -242,6 +251,7 @@ def main():
             resolved_net_colors,
             keep_pcb=args.keep_intermediates,
             skip_zones=args.skip_zones,
+            use_css_classes=args.use_css_classes,
         )
 
         unique_svgs = len(set(net_svgs.values()))

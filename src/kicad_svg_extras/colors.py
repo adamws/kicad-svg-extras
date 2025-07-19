@@ -7,6 +7,7 @@ import fnmatch
 import json
 import logging
 import re
+import shutil
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Optional
@@ -16,7 +17,6 @@ logger = logging.getLogger(__name__)
 # Default colors used throughout the application
 DEFAULT_BACKGROUND_DARK = "#282A36"
 DEFAULT_BACKGROUND_LIGHT = "#FFFFFF"
-DEFAULT_KICAD_COPPER = "#C83434"
 
 # Color validation constants
 MAX_RGB_VALUE = 255
@@ -340,6 +340,170 @@ def change_svg_color(
         raise ColorError(msg) from e
 
 
+def net_name_to_css_class(net_name: str) -> str:
+    """Convert net name to valid CSS class name.
+
+    Args:
+        net_name: Net name from PCB
+
+    Returns:
+        CSS class name like net-gnd
+    """
+    css_name = net_name.lower()
+    # Replace common problematic characters
+    css_name = css_name.replace("/", "-")
+    css_name = css_name.replace("\\", "-")
+    css_name = css_name.replace("(", "-")
+    css_name = css_name.replace(")", "-")
+    css_name = css_name.replace(" ", "-")
+    css_name = css_name.replace(".", "-")
+    css_name = css_name.replace("_", "-")
+    css_name = css_name.replace("{", "-")
+    css_name = css_name.replace("}", "-")
+    css_name = css_name.replace(":", "-")
+    css_name = css_name.replace("<", "")
+    css_name = css_name.replace(">", "")
+
+    # Remove multiple consecutive dashes
+    while "--" in css_name:
+        css_name = css_name.replace("--", "-")
+
+    # Remove leading/trailing dashes
+    css_name = css_name.strip("-")
+
+    # Ensure it starts with a letter or underscore (CSS requirement)
+    if css_name and not (css_name[0].isalpha() or css_name[0] == "_"):
+        css_name = "net-" + css_name
+
+    # If empty or only invalid chars, use a default
+    if not css_name:
+        css_name = "unknown-net"
+
+    return f"net-{css_name}"
+
+
+def apply_css_class_to_svg(
+    svg_file: Path, net_name: str, fallback_color: str, output_file: Path
+) -> None:
+    """Apply CSS class to net SVG by removing color styles and adding class attributes.
+
+    Args:
+        svg_file: Input SVG file
+        net_name: Name of the net (used to generate CSS class name)
+        fallback_color: Color for the CSS class definition
+        output_file: Output SVG file
+
+    Raises:
+        ColorError: If color operations fail
+    """
+    # Parse and validate the color
+    try:
+        hex_color = parse_color(fallback_color)
+    except ColorError as e:
+        msg = f"Invalid color: {e}"
+        raise ColorError(msg) from e
+
+    # Generate CSS class name
+    css_class = net_name_to_css_class(net_name)
+
+    # Try to detect current copper color
+    current_color = find_copper_color_in_svg(svg_file)
+    if not current_color:
+        logger.warning(
+            f"Could not detect copper color in {svg_file}, skipping CSS processing"
+        )
+        # If we can't detect the color, just copy the file without modification
+        shutil.copy2(svg_file, output_file)
+        return
+
+    # Read SVG content
+    try:
+        with open(svg_file) as f:
+            content = f.read()
+    except OSError as e:
+        msg = f"Failed to read SVG file {svg_file}: {e}"
+        raise ColorError(msg) from e
+
+    old_hex = current_color.lower()
+    old_hex_upper = current_color.upper()
+
+    # Convert hex to RGB for additional replacement
+    old_rgb_vals = tuple(int(current_color[i : i + 2], 16) for i in (1, 3, 5))
+    old_rgb = f"rgb({old_rgb_vals[0]},{old_rgb_vals[1]},{old_rgb_vals[2]})"
+
+    # Remove fill colors from style attributes and add class
+    def replace_fill_with_class(match):
+        style_content = match.group(1)
+        # Remove fill declarations
+        style_content = re.sub(r"fill:\s*[^;]+;?", "", style_content)
+        # Clean up extra spaces and semicolons
+        style_content = re.sub(r";\s*;", ";", style_content)
+        style_content = style_content.strip(";").strip()
+        return f'style="{style_content}" class="{css_class}"'
+
+    # Find and replace style attributes that contain our color
+    content = re.sub(
+        r'style="([^"]*(?:fill:\s*(?:'
+        + re.escape(old_hex)
+        + "|"
+        + re.escape(old_hex_upper)
+        + "|"
+        + re.escape(old_rgb)
+        + '))[^"]*)"',
+        replace_fill_with_class,
+        content,
+        flags=re.IGNORECASE,
+    )
+
+    # Remove stroke colors from style attributes
+    def replace_stroke_with_class(match):
+        style_content = match.group(1)
+        # Remove stroke declarations
+        style_content = re.sub(r"stroke:\s*[^;]+;?", "", style_content)
+        # Clean up extra spaces and semicolons
+        style_content = re.sub(r";\s*;", ";", style_content)
+        style_content = style_content.strip(";").strip()
+        # If element already has class, don't add it again
+        if "class=" in match.group(0):
+            return f'style="{style_content}"'
+        return f'style="{style_content}" class="{css_class}"'
+
+    # Find and replace style attributes that contain our stroke color
+    content = re.sub(
+        r'style="([^"]*(?:stroke:\s*(?:'
+        + re.escape(old_hex)
+        + "|"
+        + re.escape(old_hex_upper)
+        + "|"
+        + re.escape(old_rgb)
+        + '))[^"]*)"',
+        replace_stroke_with_class,
+        content,
+        flags=re.IGNORECASE,
+    )
+
+    # Add CSS style section after the <desc> tag
+    style_section = f"""<style>
+.{css_class} {{
+    fill: {hex_color};
+    stroke: {hex_color};
+}}
+</style>"""
+
+    # Insert style after desc tag
+    desc_end = content.find("</desc>")
+    if desc_end != -1:
+        insert_pos = desc_end + len("</desc>")
+        content = content[:insert_pos] + "\n" + style_section + content[insert_pos:]
+
+    try:
+        with open(output_file, "w") as f:
+            f.write(content)
+    except OSError as e:
+        msg = f"Failed to write SVG file {output_file}: {e}"
+        raise ColorError(msg) from e
+
+
 def apply_color_to_svg(svg_file: Path, net_color: str, output_file: Path) -> None:
     """Apply color to net SVG by detecting and replacing copper color.
 
@@ -361,8 +525,12 @@ def apply_color_to_svg(svg_file: Path, net_color: str, output_file: Path) -> Non
     # Try to detect current copper color
     current_color = find_copper_color_in_svg(svg_file)
     if not current_color:
-        logger.warning(f"Could not detect copper color in {svg_file}, using default")
-        current_color = DEFAULT_KICAD_COPPER
+        logger.warning(
+            f"Could not detect copper color in {svg_file}, skipping CSS processing"
+        )
+        # If we can't detect the color, just copy the file without modification
+        shutil.copy2(svg_file, output_file)
+        return
 
     # Apply the color change
     change_svg_color(svg_file, current_color, hex_color, output_file)

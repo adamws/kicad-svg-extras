@@ -4,12 +4,17 @@
 """SVG generation wrapper around kicad-cli."""
 
 import logging
+import shutil
 import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from kicad_svg_extras import pcb_net_filter
-from kicad_svg_extras.colors import apply_color_to_svg
+from kicad_svg_extras.colors import (
+    apply_color_to_svg,
+    apply_css_class_to_svg,
+    find_copper_color_in_svg,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -51,27 +56,132 @@ def generate_color_grouped_svgs(
     *,
     keep_pcb: bool = False,
     skip_zones: bool = False,
+    use_css_classes: bool = False,
 ) -> dict[str, Path]:
-    """Generate SVGs grouped by color for optimization."""
+    """Generate SVGs grouped by color for optimization, or individual SVGs for CSS."""
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Load board and net codes once for efficiency
     board = pcb_net_filter.load_board(pcb_file)
     net_codes = pcb_net_filter.get_net_codes(board)
 
+    net_names = list(net_codes.keys())
+
+    # Filter nets that have elements on this side
+    active_nets = []
+    for net_name in net_names:
+        if pcb_net_filter.has_elements_on_side(
+            board, net_name or "<no_net>", side, net_codes
+        ):
+            active_nets.append(net_name)
+
+    if use_css_classes:
+        # Generate individual SVG per net for CSS styling
+        return _generate_individual_net_svgs(
+            pcb_file,
+            side,
+            output_dir,
+            active_nets,
+            net_colors,
+            keep_pcb=keep_pcb,
+            skip_zones=skip_zones,
+        )
+    else:
+        # Original color grouping approach
+        return _generate_grouped_net_svgs(
+            pcb_file,
+            side,
+            output_dir,
+            active_nets,
+            net_colors,
+            keep_pcb=keep_pcb,
+            skip_zones=skip_zones,
+        )
+
+
+def _generate_individual_net_svgs(
+    pcb_file: Path,
+    side: str,
+    output_dir: Path,
+    active_nets: list[str],
+    net_colors: dict[str, str],
+    *,
+    keep_pcb: bool,
+    skip_zones: bool,
+) -> dict[str, Path]:
+    """Generate individual SVG per net with CSS classes."""
+    net_svgs = {}
+
+    for net_name in active_nets:
+        # Get user-defined color for this net (if any) for CSS class definition
+        net_color = net_colors.get(net_name)
+
+        # Create safe filename from net name
+        safe_net_name = (net_name or "no_net").replace("/", "_").replace("\\", "_")
+        safe_net_name = (
+            safe_net_name.replace("(", "_").replace(")", "_").replace(" ", "_")
+        )
+        safe_net_name = (
+            safe_net_name.replace("<", "_").replace(">", "_").replace(":", "_")
+        )
+
+        raw_svg = output_dir / f"net_{safe_net_name}_{side}.svg"
+        final_svg = output_dir / f"net_{safe_net_name}_{side}_styled.svg"
+
+        # Create PCB with only this net
+        temp_pcb = pcb_net_filter.create_multi_net_pcb(
+            pcb_file, [net_name], skip_zones=skip_zones
+        )
+
+        try:
+            # Generate SVG for this net only
+            layers = "F.Cu" if side == "front" else "B.Cu"
+            run_kicad_cli_svg(temp_pcb, layers, raw_svg)
+
+            # Apply CSS class styling
+            if net_color:
+                # User defined a custom color for this net
+                apply_css_class_to_svg(raw_svg, net_name, net_color, final_svg)
+            else:
+                # No custom color defined - detect color from SVG and use that
+                detected_color = find_copper_color_in_svg(raw_svg)
+                if detected_color:
+                    apply_css_class_to_svg(raw_svg, net_name, detected_color, final_svg)
+                else:
+                    # No color detected, just copy the file without CSS processing
+                    shutil.copy2(raw_svg, final_svg)
+
+            # Clean up raw SVG if not keeping intermediates
+            if not keep_pcb and raw_svg.exists():
+                raw_svg.unlink()
+
+            net_svgs[net_name] = final_svg
+
+        except Exception as e:
+            logger.warning(f"Failed to generate SVG for net '{net_name}': {e}")
+        finally:
+            if not keep_pcb and temp_pcb.exists():
+                temp_pcb.unlink()
+
+    return net_svgs
+
+
+def _generate_grouped_net_svgs(
+    pcb_file: Path,
+    side: str,
+    output_dir: Path,
+    active_nets: list[str],
+    net_colors: dict[str, str],
+    *,
+    keep_pcb: bool,
+    skip_zones: bool,
+) -> dict[str, Path]:
+    """Generate SVGs grouped by color (original approach)."""
     # Group nets by their final colors
     color_groups: dict[str, list[str]] = {}
     default_nets = []
 
-    net_names = list(net_codes.keys())
-
-    for net_name in net_names:
-        # Skip nets with no elements on this side
-        if not pcb_net_filter.has_elements_on_side(
-            board, net_name or "<no_net>", side, net_codes
-        ):
-            continue
-
+    for net_name in active_nets:
         if net_name in net_colors:
             color = net_colors[net_name]
             if color not in color_groups:
