@@ -167,6 +167,11 @@ def load_color_config(config_file: Path) -> dict[str, str]:
     else:
         net_colors_raw = data
 
+    # Handle case where no net colors found or net_colors_raw is None
+    if net_colors_raw is None or not isinstance(net_colors_raw, dict):
+        logger.info(f"No net color configuration found in {config_file}")
+        return {}
+
     # Parse all color values to hex format
     converted_colors = {}
     for net_name, color_value in net_colors_raw.items():
