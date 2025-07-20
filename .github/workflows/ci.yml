@@ -28,11 +28,14 @@ jobs:
 
     - name: Install test dependencies
       run: |
-        pip install --upgrade pytest
+        pip install --upgrade -r dev-requirements.txt
         pip install -e .
 
     - name: Run tests
-      run: pytest tests/
+      run: pytest --cov kicad_svg_extras tests/
+
+    - name: Coverage
+      run: coverage report -m
 
   lint:
     name: Lint
