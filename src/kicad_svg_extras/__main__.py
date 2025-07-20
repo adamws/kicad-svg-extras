@@ -17,6 +17,13 @@ from kicad_svg_extras.colors import (
     parse_color,
     resolve_net_color,
 )
+from kicad_svg_extras.layers import (
+    get_copper_layers,
+    get_non_copper_layers,
+    parse_layer_list,
+    sort_layers_by_stackup,
+    validate_layers,
+)
 from kicad_svg_extras.logging import setup_logging
 from kicad_svg_extras.svg_processor import (
     add_background_to_svg,
@@ -57,10 +64,14 @@ def main():
         "output_dir", type=Path, nargs="?", help="Output directory for generated SVGs"
     )
     parser.add_argument(
-        "--side",
-        choices=["front", "back", "both"],
-        default="both",
-        help="Which side to generate (default: both)",
+        "--layers",
+        type=str,
+        default="F.Cu,B.Cu",
+        help=(
+            "Comma-separated list of KiCad layer names to process "
+            "(e.g., 'F.Cu,B.Cu,In1.Cu,In2.Cu' or 'F.Cu,F.SilkS,Edge.Cuts'). "
+            "Default: F.Cu,B.Cu"
+        ),
     )
     parser.add_argument(
         "--colors",
@@ -115,24 +126,19 @@ def main():
         help="Set the logging level (default: INFO)",
     )
     parser.add_argument(
-        "--with-silkscreen",
-        action="store_true",
-        help=(
-            "Include silkscreen layers in the output "
-            "(F.Silkscreen for front, B.Silkscreen for back)"
-        ),
-    )
-    parser.add_argument(
-        "--with-edge",
-        action="store_true",
-        help="Include board edge cuts (Edge.Cuts) in the output",
-    )
-    parser.add_argument(
         "--fit-to-content",
         action="store_true",
         help=(
             "Remove unnecessary margins from final SVG by fitting to content. "
             "Requires Inkscape to be available in PATH."
+        ),
+    )
+    parser.add_argument(
+        "--reverse-stackup",
+        action="store_true",
+        help=(
+            "Reverse the layer stacking order for bottom-to-front view. "
+            "Default is front-to-back (top-down view)."
         ),
     )
 
@@ -236,122 +242,117 @@ def main():
                 f"No custom color defined for net '{net_name}', using KiCad default"
             )
 
+    # Parse and validate layers
+    layer_list = parse_layer_list(args.layers)
+    if not layer_list:
+        logger.error("No layers specified")
+        sys.exit(1)
+
+    invalid_layers = validate_layers(layer_list)
+    if invalid_layers:
+        logger.error(f"Invalid layer names: {', '.join(invalid_layers)}")
+        sys.exit(1)
+
+    # Separate copper and non-copper layers
+    copper_layers = get_copper_layers(layer_list)
+    non_copper_layers = get_non_copper_layers(layer_list)
+
+    if not copper_layers:
+        logger.error("At least one copper layer must be specified")
+        sys.exit(1)
+
+    logger.info(f"Processing copper layers: {', '.join(copper_layers)}")
+    if non_copper_layers:
+        logger.info(f"Processing non-copper layers: {', '.join(non_copper_layers)}")
+
     # Create output directory
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Process each side
-    sides = ["front", "back"] if args.side == "both" else [args.side]
-
-    # Collect SVGs from all sides for potential merging
-    all_side_svgs = []
+    # Process the specified layers
+    temp_dir = args.output_dir / "temp"
     temp_dirs_to_cleanup = []
 
-    for side in sides:
-        logger.info(f"Processing {side} side...")
+    logger.info(f"Processing layers: {', '.join(layer_list)}")
 
-        temp_dir = args.output_dir / f"temp_{side}"
-        net_svgs = svg_generator.generate_color_grouped_svgs(
-            args.pcb_file,
-            side,
-            temp_dir,
-            resolved_net_colors,
-            keep_pcb=args.keep_intermediates,
-            skip_zones=args.skip_zones,
-            use_css_classes=args.use_css_classes,
-        )
+    # Generate colored SVGs for copper layers (nets)
+    net_svgs = svg_generator.generate_color_grouped_svgs(
+        args.pcb_file,
+        copper_layers,
+        temp_dir,
+        resolved_net_colors,
+        keep_pcb=args.keep_intermediates,
+        skip_zones=args.skip_zones,
+        use_css_classes=args.use_css_classes,
+        reverse_stackup=args.reverse_stackup,
+    )
 
-        unique_svgs = len(set(net_svgs.values()))
-        logger.info(
-            f"Generated {unique_svgs} color-grouped SVGs covering {len(net_svgs)} "
-            f"nets for {side} side"
-        )
+    unique_svgs = len(set(net_svgs.values()))
+    logger.info(
+        f"Generated {unique_svgs} color-grouped SVGs covering {len(net_svgs)} nets"
+    )
 
-        # Collect unique intermediate SVGs (already colored during generation)
-        unique_svgs = list(set(net_svgs.values()))
+    # Collect unique intermediate SVGs (already colored during generation)
+    copper_svgs = list(set(net_svgs.values()))
 
-        # Generate additional layers if requested and build proper layering order
-        all_svgs_to_merge = []
+    # Generate SVGs for non-copper layers and build proper layering order
+    all_svgs_to_merge = []
 
-        # Layer 1: Edge cuts (background)
-        if args.with_edge:
-            edge_svg = temp_dir / f"edge_cuts_{side}.svg"
-            try:
-                svg_generator.generate_edge_cuts_svg(args.pcb_file, edge_svg)
-                all_svgs_to_merge.append(edge_svg)
-                logger.info(f"Generated edge cuts SVG: {edge_svg.name}")
-            except Exception as e:
-                logger.warning(f"Failed to generate edge cuts SVG: {e}")
+    # Sort all layers by stackup order for proper rendering
+    sorted_layers = sort_layers_by_stackup(layer_list, reverse=args.reverse_stackup)
 
-        # Layer 2: Copper layers (middle)
-        all_svgs_to_merge.extend(unique_svgs)
+    # Add all copper SVGs first (they're already generated and colored)
+    all_svgs_to_merge.extend(copper_svgs)
 
-        # Layer 3: Silkscreen (top)
-        if args.with_silkscreen:
-            silkscreen_svg = temp_dir / f"silkscreen_{side}.svg"
-            try:
-                svg_generator.generate_silkscreen_svg(
-                    args.pcb_file, side, silkscreen_svg
-                )
-                all_svgs_to_merge.append(silkscreen_svg)
-                logger.info(f"Generated silkscreen SVG: {silkscreen_svg.name}")
-            except Exception as e:
-                logger.warning(f"Warning: Failed to generate silkscreen SVG: {e}")
-
-        # Create merged SVG for this side with proper layer ordering
-        side_output_file = args.output_dir / f"{side}_colored.svg"
-
+    # Generate SVGs for non-copper layers and insert them in proper order
+    non_copper_svgs = {}
+    for layer_name in non_copper_layers:
+        layer_svg = temp_dir / f"{layer_name.replace('.', '_')}.svg"
         try:
-            merge_svg_files(all_svgs_to_merge, side_output_file)
-
-            # Fit to content if requested (before adding background)
-            if args.fit_to_content:
-                try:
-                    fit_svg_to_content(side_output_file)
-                except RuntimeError as e:
-                    logger.warning(f"Failed to fit SVG to content: {e}")
-
-            if not args.no_background:
-                add_background_to_svg(side_output_file, args.background_color)
-            logger.info(f"Created colored SVG: {side_output_file}")
-            all_side_svgs.append(side_output_file)
-
+            svg_generator.generate_layer_svg(args.pcb_file, layer_name, layer_svg)
+            non_copper_svgs[layer_name] = layer_svg
+            logger.info(f"Generated {layer_name} SVG: {layer_svg.name}")
         except Exception as e:
-            logger.error(f"Error creating colored SVG for {side} side: {e}")
-            continue
+            logger.warning(f"Failed to generate {layer_name} SVG: {e}")
 
-        # Track temp directories for cleanup
-        if not args.keep_intermediates:
-            temp_dirs_to_cleanup.append(temp_dir)
-        elif args.keep_intermediates and temp_dir.exists():
-            logger.info(f"Intermediate files kept in: {temp_dir}")
+    # Now rebuild the list in proper stackup order
+    all_svgs_to_merge = []
+    for layer_name in sorted_layers:
+        if layer_name in copper_layers:
+            # Add copper SVGs in the position of the first copper layer
+            if copper_svgs:
+                all_svgs_to_merge.extend(copper_svgs)
+                copper_svgs = []  # Only add them once
+        elif layer_name in non_copper_svgs:
+            # Add non-copper layer SVG
+            all_svgs_to_merge.append(non_copper_svgs[layer_name])
 
-    # If both sides were processed, merge them into a single file
-    if args.side == "both" and len(all_side_svgs) == 2:  # noqa: PLR2004
-        merged_output = args.output_dir / "colored.svg"
-        logger.info(f"Merging both sides into: {merged_output}")
+    # Create merged SVG with proper layer ordering
+    layer_suffix = "_".join(copper_layers).replace(".", "_")
+    output_file = args.output_dir / f"colored_{layer_suffix}.svg"
 
-        try:
-            merge_svg_files(all_side_svgs, merged_output)
+    try:
+        merge_svg_files(all_svgs_to_merge, output_file)
 
-            # Fit to content if requested (before adding background)
-            if args.fit_to_content:
-                try:
-                    fit_svg_to_content(merged_output)
-                except RuntimeError as e:
-                    logger.warning(f"Failed to fit merged SVG to content: {e}")
+        # Fit to content if requested (before adding background)
+        if args.fit_to_content:
+            try:
+                fit_svg_to_content(output_file)
+            except RuntimeError as e:
+                logger.warning(f"Failed to fit SVG to content: {e}")
 
-            if not args.no_background:
-                add_background_to_svg(merged_output, args.background_color)
-            logger.info(f"Created merged SVG: {merged_output}")
+        if not args.no_background:
+            add_background_to_svg(output_file, args.background_color)
+        logger.info(f"Created colored SVG: {output_file}")
 
-            # Remove individual side files if merge was successful
-            for side_svg in all_side_svgs:
-                if side_svg.exists():
-                    side_svg.unlink()
+    except Exception as e:
+        logger.error(f"Error creating colored SVG: {e}")
+        sys.exit(1)
 
-        except Exception as e:
-            logger.error(f"Error merging sides: {e}")
-            logger.info("Individual side files have been kept.")
+    # Track temp directories for cleanup
+    if not args.keep_intermediates:
+        temp_dirs_to_cleanup.append(temp_dir)
+    elif args.keep_intermediates and temp_dir.exists():
+        logger.info(f"Intermediate files kept in: {temp_dir}")
 
     # Clean up temporary files
     for temp_dir in temp_dirs_to_cleanup:

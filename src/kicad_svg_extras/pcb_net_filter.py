@@ -73,6 +73,45 @@ def has_elements_on_side(
     return False
 
 
+def has_elements_on_layers(
+    board, net_name: str, layers: list[str], net_codes: dict[str, int]
+) -> bool:
+    """Check if a net has any tracks, pads, or vias on any of the given layers."""
+    if net_name not in net_codes:
+        return False
+
+    net_code = net_codes[net_name]
+
+    # Convert layer names to KiCad layer IDs
+    layer_ids = []
+    for layer_name in layers:
+        try:
+            if layer_name == "F.Cu":
+                layer_ids.append(pcbnew.F_Cu)
+            elif layer_name == "B.Cu":
+                layer_ids.append(pcbnew.B_Cu)
+            elif layer_name.startswith("In") and layer_name.endswith(".Cu"):
+                # Extract internal layer number (In1.Cu -> 1, In2.Cu -> 2, etc.)
+                layer_num_str = layer_name[2:-3]  # Remove "In" and ".Cu"
+                layer_num = int(layer_num_str)
+                # Internal layers in KiCad use In1_Cu, In2_Cu, etc.
+                layer_id = getattr(pcbnew, f"In{layer_num}_Cu", None)
+                if layer_id is not None:
+                    layer_ids.append(layer_id)
+        except (ValueError, AttributeError):
+            # Skip invalid layer names
+            continue
+
+    # Check if net has elements on any of the specified layers
+    for item in board.AllConnectedItems():
+        if item.GetNetCode() == net_code:
+            for layer_id in layer_ids:
+                if item.IsOnLayer(layer_id):
+                    return True
+
+    return False
+
+
 def create_filtered_pcb(
     pcb_file: Path,
     net_names: set[str],
