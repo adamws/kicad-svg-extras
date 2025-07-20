@@ -29,7 +29,11 @@ logger = logging.getLogger(__name__)
 
 def load_board(pcb_file: Path):
     """Load a PCB board from file."""
-    return pcbnew.LoadBoard(str(pcb_file))
+    board = pcbnew.LoadBoard(str(pcb_file))
+    if not board:
+        msg = f"Failed to load board: {pcb_file}"
+        raise RuntimeError(msg)
+    return board
 
 
 def get_net_codes(board) -> dict[str, int]:
