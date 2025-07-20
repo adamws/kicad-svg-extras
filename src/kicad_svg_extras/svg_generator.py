@@ -173,9 +173,10 @@ def _generate_individual_net_svgs_single_layer(
         raw_svg = output_dir / f"net_{safe_net_name}_{layer_suffix}.svg"
         final_svg = output_dir / f"net_{safe_net_name}_{layer_suffix}_styled.svg"
 
-        # Create PCB with only this net
+        # Create PCB with only this net in output directory
+        pcb_file_path = output_dir / f"net_{safe_net_name}_{layer_suffix}.kicad_pcb"
         temp_pcb = pcb_net_filter.create_multi_net_pcb(
-            pcb_file, [net_name], skip_zones=skip_zones
+            pcb_file, [net_name], pcb_file_path, skip_zones=skip_zones
         )
 
         try:
@@ -292,8 +293,9 @@ def _generate_grouped_net_svgs_single_layer(
         )
         layer_suffix = layer_name.replace(".", "_")
         default_svg = output_dir / f"default_nets_{layer_suffix}.svg"
+        pcb_file_path = output_dir / f"default_nets_{layer_suffix}.kicad_pcb"
         temp_pcb = pcb_net_filter.create_multi_net_pcb(
-            pcb_file, default_nets, skip_zones=skip_zones
+            pcb_file, default_nets, pcb_file_path, skip_zones=skip_zones
         )
 
         try:
@@ -321,8 +323,9 @@ def _generate_grouped_net_svgs_single_layer(
         layer_suffix = layer_name.replace(".", "_")
         raw_svg = output_dir / f"raw_{safe_color}_{layer_suffix}.svg"
         color_svg = output_dir / f"{safe_color}_{layer_suffix}.svg"
+        pcb_file_path = output_dir / f"{safe_color}_{layer_suffix}.kicad_pcb"
         temp_pcb = pcb_net_filter.create_multi_net_pcb(
-            pcb_file, nets_with_color, skip_zones=skip_zones
+            pcb_file, nets_with_color, pcb_file_path, skip_zones=skip_zones
         )
 
         try:
