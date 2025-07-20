@@ -101,13 +101,22 @@ def parse_color(color_value: str) -> str:
     if re.match(r"^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$", color_value):
         return color_value.upper()[:7]  # Return only RGB part, uppercase
 
-    # RGB format: rgb(255, 0, 255) or rgba(255, 0, 255, 1.0)
+    # RGB format: rgb(255, 0, 255) - exactly 3 values
     rgb_match = re.match(
-        r"^rgba?\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*[\d.]+)?\s*\)$",
+        r"^rgb\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)$",
         color_value,
     )
-    if rgb_match:
-        r, g, b = [int(val) for val in rgb_match.groups()]
+    # RGBA format: rgba(255, 0, 255, 1.0) - exactly 4 values
+    rgba_match = re.match(
+        r"^rgba\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*[\d.]+\s*\)$",
+        color_value,
+    )
+    if rgb_match or rgba_match:
+        match = rgb_match if rgb_match else rgba_match
+        if match is None:  # This should never happen but satisfies mypy
+            msg = "Internal error: regex match is None"
+            raise ColorError(msg)
+        r, g, b = [int(val) for val in match.groups()]
         # Validate RGB values
         if not all(0 <= val <= MAX_RGB_VALUE for val in (r, g, b)):
             msg = f"RGB values must be between 0-{MAX_RGB_VALUE}, got ({r}, {g}, {b})"
@@ -132,6 +141,8 @@ def validate_hex_color(hex_color: str) -> bool:
     Returns:
         True if valid hex color, False otherwise
     """
+    if not isinstance(hex_color, str):
+        return False
     return bool(re.match(r"^#[0-9A-Fa-f]{6}$", hex_color))
 
 
@@ -263,8 +274,8 @@ def find_copper_color_in_svg(svg_file: Path) -> Optional[str]:
     try:
         tree = ET.parse(svg_file)
         root = tree.getroot()
-    except ET.ParseError as e:
-        logger.warning(f"Failed to parse SVG file {svg_file}: {e}")
+    except (ET.ParseError, FileNotFoundError, OSError) as e:
+        logger.warning(f"Failed to read or parse SVG file {svg_file}: {e}")
         return None
 
     # Look for fill colors in the SVG (both fill attribute and style attribute)
