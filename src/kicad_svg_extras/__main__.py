@@ -17,6 +17,7 @@ from kicad_svg_extras.colors import (
     parse_color,
     resolve_net_color,
 )
+from kicad_svg_extras.logging import setup_logging
 from kicad_svg_extras.svg_processor import (
     add_background_to_svg,
     fit_svg_to_content,
@@ -138,11 +139,7 @@ def main():
     args = parser.parse_args()
 
     # Configure clean logging for CLI application
-    logging.basicConfig(
-        level=getattr(logging, args.log_level.upper()),
-        format="%(levelname)s: %(message)s",
-        datefmt="%H:%M:%S",
-    )
+    setup_logging(level=getattr(logging, args.log_level.upper()))
 
     # Validate inputs for SVG generation
     if not args.pcb_file:
