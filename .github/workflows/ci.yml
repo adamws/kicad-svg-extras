@@ -35,7 +35,11 @@ jobs:
       run: pytest --cov kicad_svg_extras tests/
 
     - name: Coverage
-      run: coverage report -m
+      run: |
+        echo '### coverage' >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        coverage report -m >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
 
   lint:
     name: Lint
