@@ -19,6 +19,7 @@ from kicad_svg_extras.colors import (
 )
 from kicad_svg_extras.svg_processor import (
     add_background_to_svg,
+    fit_svg_to_content,
     merge_svg_files,
 )
 
@@ -124,6 +125,14 @@ def main():
         "--with-edge",
         action="store_true",
         help="Include board edge cuts (Edge.Cuts) in the output",
+    )
+    parser.add_argument(
+        "--fit-to-content",
+        action="store_true",
+        help=(
+            "Remove unnecessary margins from final SVG by fitting to content. "
+            "Requires Inkscape to be available in PATH."
+        ),
     )
 
     args = parser.parse_args()
@@ -296,6 +305,14 @@ def main():
 
         try:
             merge_svg_files(all_svgs_to_merge, side_output_file)
+
+            # Fit to content if requested (before adding background)
+            if args.fit_to_content:
+                try:
+                    fit_svg_to_content(side_output_file)
+                except RuntimeError as e:
+                    logger.warning(f"Failed to fit SVG to content: {e}")
+
             if not args.no_background:
                 add_background_to_svg(side_output_file, args.background_color)
             logger.info(f"Created colored SVG: {side_output_file}")
@@ -318,6 +335,14 @@ def main():
 
         try:
             merge_svg_files(all_side_svgs, merged_output)
+
+            # Fit to content if requested (before adding background)
+            if args.fit_to_content:
+                try:
+                    fit_svg_to_content(merged_output)
+                except RuntimeError as e:
+                    logger.warning(f"Failed to fit merged SVG to content: {e}")
+
             if not args.no_background:
                 add_background_to_svg(merged_output, args.background_color)
             logger.info(f"Created merged SVG: {merged_output}")

@@ -5,6 +5,7 @@
 
 import logging
 import re
+import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Optional
@@ -220,3 +221,47 @@ def add_background_to_svg(svg_file: Path, background_color: str) -> None:
         parent.insert(desc_index + 1, rect)
 
         tree.write(svg_file, encoding="unicode")
+
+
+def fit_svg_to_content(svg_file: Path) -> None:
+    """Fit SVG to content by removing unnecessary margins using Inkscape.
+
+    Args:
+        svg_file: Path to SVG file to process in-place
+
+    Raises:
+        RuntimeError: If Inkscape is not available or command fails
+    """
+    # Check if Inkscape is available
+    try:
+        cmd = ["inkscape", "--version"]
+        result = subprocess.run(  # noqa: S603
+            cmd, check=False, capture_output=True, text=True
+        )
+        if result.returncode != 0:
+            msg = "Inkscape is not available in PATH"
+            raise RuntimeError(msg)
+    except FileNotFoundError as e:
+        msg = "Inkscape is not available in PATH"
+        raise RuntimeError(msg) from e
+
+    # Use Inkscape to fit page to content
+    cmd = [
+        "inkscape",
+        "--export-type=svg",
+        "--export-area-drawing",
+        "--export-margin=1",  # Small margin to avoid clipping
+        "--export-filename=" + str(svg_file),
+        str(svg_file),
+    ]
+
+    logger.debug(f"Running Inkscape command: {' '.join(cmd)}")
+
+    result = subprocess.run(  # noqa: S603
+        cmd, check=False, capture_output=True, text=True
+    )
+    if result.returncode != 0:
+        msg = f"Inkscape failed: {result.stderr}"
+        raise RuntimeError(msg)
+
+    logger.info(f"Fitted SVG to content: {svg_file}")
