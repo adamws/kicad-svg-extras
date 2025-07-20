@@ -166,11 +166,32 @@ def load_color_config(config_file: Path) -> dict[str, str]:
         raise ColorError(msg) from e
 
     # Try to find net_colors in various locations
-    net_colors_raw = None
+    net_colors_raw = {}
 
-    # Option 1: KiCad project format with net_settings.net_colors
-    if "net_settings" in data and "net_colors" in data["net_settings"]:
-        net_colors_raw = data["net_settings"]["net_colors"]
+    # Option 1: KiCad project format with net_settings
+    if "net_settings" in data:
+        net_settings = data["net_settings"]
+
+        # First, collect netclass colors by name
+        netclass_colors = {}
+        if "classes" in net_settings:
+            for net_class in net_settings["classes"]:
+                if "name" in net_class and "pcb_color" in net_class:
+                    netclass_colors[net_class["name"]] = net_class["pcb_color"]
+
+        # Second, apply netclass colors to patterns
+        if "netclass_patterns" in net_settings:
+            for pattern_info in net_settings["netclass_patterns"]:
+                if "netclass" in pattern_info and "pattern" in pattern_info:
+                    net_class_name = pattern_info["netclass"]
+                    if net_class_name in netclass_colors:
+                        net_colors_raw[pattern_info["pattern"]] = netclass_colors[
+                            net_class_name
+                        ]
+
+        # Finally, apply specific net colors
+        if "net_colors" in net_settings and net_settings["net_colors"] is not None:
+            net_colors_raw.update(net_settings["net_colors"])
     # Option 2: Our custom format with top-level net_colors
     elif "net_colors" in data:
         net_colors_raw = data["net_colors"]
