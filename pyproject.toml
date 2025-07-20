@@ -42,6 +42,25 @@ path = "src/kicad_svg_extras/__init__.py"
 [tool.hatch.build.targets.wheel]
 packages = ["src/kicad_svg_extras"]
 
+[tool.hatch.envs.default]
+dependencies = [
+  "coverage[toml]>=6.5",
+  "pytest",
+]
+
+[tool.hatch.envs.default.scripts]
+test-unit = "pytest -m unit {args}"
+test-unit-cov = "coverage run --source src/* -m pytest -m unit {args}"
+test-functional = "echo \"Functional testing not available in default env\""
+cov-report = [
+  "- coverage combine",
+  "coverage report -m",
+]
+cov = [
+  "test-unit-cov",
+  "cov-report",
+]
+
 [tool.hatch.envs.lint]
 detached = true
 dependencies = [
@@ -146,3 +165,15 @@ module = [
     "pytest.*",
 ]
 ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+markers = [
+    "unit: Unit tests that do not require KiCad installation",
+    "functional: Functional tests that require KiCad installation and real PCB files",
+]
+testpaths = ["tests"]
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "--verbose",
+]

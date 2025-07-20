@@ -10,8 +10,37 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
-    name: Test
+  unit-tests:
+    name: Unit Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade hatch
+
+    - name: Test
+      run: |
+        hatch run cov
+
+    - name: Coverage
+      if: matrix.python-version == '3.13'
+      run: |
+        echo '### Unit Tests Coverage' >> $GITHUB_STEP_SUMMARY
+        hatch run coverage report --format markdown -m >> $GITHUB_STEP_SUMMARY
+
+  functional-tests:
+    name: Functional Tests (with KiCad)
     runs-on: ubuntu-latest
 
     steps:
@@ -31,15 +60,13 @@ jobs:
         pip install --upgrade -r dev-requirements.txt
         pip install -e .
 
-    - name: Run tests
-      run: pytest --cov kicad_svg_extras tests/
+    - name: Run functional tests
+      run: pytest -m functional --cov kicad_svg_extras tests/
 
     - name: Coverage
       run: |
-        echo '### coverage' >> $GITHUB_STEP_SUMMARY
-        echo '```' >> $GITHUB_STEP_SUMMARY
-        coverage report -m >> $GITHUB_STEP_SUMMARY
-        echo '```' >> $GITHUB_STEP_SUMMARY
+        echo '### Functional Tests Coverage' >> $GITHUB_STEP_SUMMARY
+        coverage report --format markdown -m >> $GITHUB_STEP_SUMMARY
 
   lint:
     name: Lint

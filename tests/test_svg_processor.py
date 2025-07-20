@@ -14,6 +14,8 @@ from kicad_svg_extras.svg_processor import (
     merge_svg_files,
 )
 
+pytestmark = pytest.mark.unit
+
 
 def assert_valid_svg(svg_content: str) -> ET.Element:
     """Assert that the content is valid XML/SVG and return the root element.

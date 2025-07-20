@@ -19,6 +19,8 @@ from kicad_svg_extras.layers import (
     validate_layers,
 )
 
+pytestmark = pytest.mark.unit
+
 
 class TestLayerInfo:
     """Test LayerInfo dataclass functionality."""

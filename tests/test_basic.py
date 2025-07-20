@@ -5,7 +5,10 @@
 
 import subprocess
 
+import pytest
 
+
+@pytest.mark.functional
 def test_cli_help():
     """Test that the CLI help works."""
     result = subprocess.run(
@@ -19,6 +22,7 @@ def test_cli_help():
     assert "Generate SVG files with custom per-net colors" in result.stdout
 
 
+@pytest.mark.functional
 def test_kicad_cli_available():
     """Test that KiCad CLI is available."""
     result = subprocess.run(
