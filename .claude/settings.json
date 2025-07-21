@@ -3,6 +3,7 @@
     "allow": [
       "Bash(just lint)",
       "Bash(just fmt)",
+      "Bash(just format)",
       "Bash(just test*)",
       "Bash(just demo*)"
     ],

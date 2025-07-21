@@ -79,5 +79,6 @@ test-unit-cov:
 lint:
   hatch run lint:all
 
-fmt:
+alias fmt := format
+format:
   hatch run lint:fmt
