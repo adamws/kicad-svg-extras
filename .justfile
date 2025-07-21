@@ -10,6 +10,11 @@ svg_viewer := if has_inkview == "yes" {
 } else {
   "echo 'Warning: Neither inkview nor firefox found. Cannot open SVG.'"
 }
+bash_flags := if env("CLAUDECODE", "0") == "1" {
+  "-euo pipefail"
+} else {
+  "-euxo pipefail"
+}
 
 clean-venv:
   rm -rf .env
@@ -17,6 +22,7 @@ clean-venv:
 # this environment is required for running demos and functional tests
 venv:
   #!/usr/bin/env bash
+  set {{ bash_flags }}
   python -m venv --system-site-packages .env
   . .env/bin/activate
   python -m pip install -e .
@@ -30,7 +36,7 @@ preview-svg path:
 
 demo-simple2layer:
   #!/usr/bin/env bash
-  set -euxo pipefail
+  set {{ bash_flags }}
   . .env/bin/activate
   rm -rf output_test
   kicad-svg-extras --layers "F.Cu,In1.Cu,In2.Cu,B.Cu,F.SilkS,B.SilkS,Edge.Cuts" \
@@ -38,11 +44,11 @@ demo-simple2layer:
     --net-color "GND:red" --net-color "VCC:blue" --net-color "VPP:green" \
     --fit-to-content --background-color "black" \
     --keep-intermediates {{ kicad_demo }} output_test
-  just preview-svg output_test/colored_F_Cu_In1_Cu_In2_Cu_B_Cu.svg
+  just preview-svg output_test/colored*.svg
 
 demo-simple2layer-css:
   #!/usr/bin/env bash
-  set -euxo pipefail
+  set {{ bash_flags }}
   . .env/bin/activate
   rm -rf output_test_css
   kicad-svg-extras --layers "F.Cu,In1.Cu,In2.Cu,B.Cu,F.SilkS,B.SilkS,Edge.Cuts" \
@@ -50,20 +56,20 @@ demo-simple2layer-css:
     --net-color "GND:red" --net-color "VCC:blue" --net-color "VPP:green" \
     --use-css-classes \
     --keep-intermediates {{ kicad_demo }} output_test_css
-  just preview-svg output_test_css/colored_F_Cu_In1_Cu_In2_Cu_B_Cu.svg
+  just preview-svg output_test_css/colored*.svg
 
 test-unit:
   hatch run test-unit
 
 test-functional:
   #!/usr/bin/env bash
-  set -euxo pipefail
+  set {{ bash_flags }}
   . .env/bin/activate
   python -m pytest -m functional --html=output_test/functional_report.html --self-contained-html tests/
 
 test-functional-generate-refs:
   #!/usr/bin/env bash
-  set -euxo pipefail
+  set {{ bash_flags }}
   . .env/bin/activate
   python -m pytest -m functional --generate-references tests/
 
