@@ -8,3 +8,6 @@
 
 # Workflow
 - Run `just fmt` and `just lint` when you’re done making a series of code changes
+- When writing git commit message describe only what you changed and why.
+  Do not describe intermediate struggles, things you must have fixed in the
+  meantime. Just final state of changes.
