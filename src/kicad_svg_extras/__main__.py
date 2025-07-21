@@ -18,7 +18,6 @@ from kicad_svg_extras.colors import (
     resolve_net_color,
 )
 from kicad_svg_extras.layers import (
-    filter_layers_by_pcb_availability,
     get_copper_layers,
     get_non_copper_layers,
     parse_layer_list,
@@ -26,6 +25,7 @@ from kicad_svg_extras.layers import (
     validate_layers,
 )
 from kicad_svg_extras.logging import setup_logging
+from kicad_svg_extras.pcbnew_utils import filter_layers_by_pcb_availability
 from kicad_svg_extras.svg_processor import (
     add_background_to_svg,
     fit_svg_to_content,

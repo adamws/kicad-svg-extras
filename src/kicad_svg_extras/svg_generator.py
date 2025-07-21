@@ -9,7 +9,7 @@ import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from kicad_svg_extras import pcb_net_filter
+from kicad_svg_extras import pcbnew_utils
 from kicad_svg_extras.colors import (
     apply_color_to_svg,
     apply_css_class_to_svg,
@@ -64,8 +64,8 @@ def generate_color_grouped_svgs(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Load board and net codes once for efficiency
-    board = pcb_net_filter.load_board(pcb_file)
-    net_codes = pcb_net_filter.get_net_codes(board)
+    board = pcbnew_utils.load_board(pcb_file)
+    net_codes = pcbnew_utils.get_net_codes(board)
 
     net_names = list(net_codes.keys())
 
@@ -74,7 +74,7 @@ def generate_color_grouped_svgs(
 
     active_nets = []
     for net_name in net_names:
-        if pcb_net_filter.has_elements_on_layers(
+        if pcbnew_utils.has_elements_on_layers(
             board, net_name or "<no_net>", copper_layers, net_codes
         ):
             active_nets.append(net_name)
@@ -175,7 +175,7 @@ def _generate_individual_net_svgs_single_layer(
 
         # Create PCB with only this net in output directory
         pcb_file_path = output_dir / f"net_{safe_net_name}_{layer_suffix}.kicad_pcb"
-        temp_pcb = pcb_net_filter.create_multi_net_pcb(
+        temp_pcb = pcbnew_utils.create_multi_net_pcb(
             pcb_file, [net_name], pcb_file_path, skip_zones=skip_zones
         )
 
@@ -294,7 +294,7 @@ def _generate_grouped_net_svgs_single_layer(
         layer_suffix = layer_name.replace(".", "_")
         default_svg = output_dir / f"default_nets_{layer_suffix}.svg"
         pcb_file_path = output_dir / f"default_nets_{layer_suffix}.kicad_pcb"
-        temp_pcb = pcb_net_filter.create_multi_net_pcb(
+        temp_pcb = pcbnew_utils.create_multi_net_pcb(
             pcb_file, default_nets, pcb_file_path, skip_zones=skip_zones
         )
 
@@ -324,7 +324,7 @@ def _generate_grouped_net_svgs_single_layer(
         raw_svg = output_dir / f"raw_{safe_color}_{layer_suffix}.svg"
         color_svg = output_dir / f"{safe_color}_{layer_suffix}.svg"
         pcb_file_path = output_dir / f"{safe_color}_{layer_suffix}.kicad_pcb"
-        temp_pcb = pcb_net_filter.create_multi_net_pcb(
+        temp_pcb = pcbnew_utils.create_multi_net_pcb(
             pcb_file, nets_with_color, pcb_file_path, skip_zones=skip_zones
         )
 
@@ -388,5 +388,5 @@ def generate_silkscreen_svg(pcb_file: Path, side: str, output_file: Path) -> Pat
 
 def get_net_names(pcb_file: Path) -> list[str]:
     """Get all net names from the PCB."""
-    net_names = pcb_net_filter.get_net_names(pcb_file)
+    net_names = pcbnew_utils.get_net_names(pcb_file)
     return [name for name in net_names if name]  # Filter out empty names
