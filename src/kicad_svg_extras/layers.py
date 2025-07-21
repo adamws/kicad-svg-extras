@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from enum import Enum
 
@@ -215,6 +216,94 @@ def get_default_copper_layers(num_layers: int = 2) -> list[str]:
 
     layers.append("B.Cu")
     return layers
+
+
+def get_enabled_layers_from_pcb(pcb_file_path: str) -> list[str]:
+    """Get list of enabled layers from a PCB file.
+
+    Args:
+        pcb_file_path: Path to the .kicad_pcb file
+
+    Returns:
+        List of enabled layer names
+
+    Raises:
+        ImportError: If pcbnew module is not available
+        RuntimeError: If PCB file cannot be loaded
+    """
+    try:
+        import pcbnew  # noqa: PLC0415
+    except ImportError as e:
+        msg = "pcbnew module not available - cannot detect layers from PCB"
+        raise ImportError(msg) from e
+
+    try:
+        board = pcbnew.LoadBoard(pcb_file_path)
+        if not board:
+            msg = f"Failed to load PCB file: {pcb_file_path}"
+            raise RuntimeError(msg)
+
+        enabled_layers = board.GetEnabledLayers()
+        layer_names = []
+
+        # Check all known layers
+        for layer_name in LAYER_DEFINITIONS:
+            try:
+                layer_id = board.GetLayerID(layer_name)
+                if enabled_layers.Contains(layer_id):
+                    layer_names.append(layer_name)
+            except Exception as e:
+                # Layer name not recognized by board, skip it
+                logger = logging.getLogger(__name__)
+                logger.debug(f"Layer '{layer_name}' not recognized by board: {e}")
+                continue
+
+        return layer_names
+
+    except Exception as e:
+        msg = f"Error reading layers from PCB file: {e}"
+        raise RuntimeError(msg) from e
+
+
+def filter_layers_by_pcb_availability(
+    layer_names: list[str], pcb_file_path: str | None = None
+) -> list[str]:
+    """Filter layer list to only include layers enabled in the PCB.
+
+    Args:
+        layer_names: List of layer names to filter
+        pcb_file_path: Path to PCB file for layer detection (optional)
+
+    Returns:
+        Filtered list of layer names that exist in the PCB
+
+    Note:
+        If pcb_file_path is None or layer detection fails, returns original list
+    """
+    if not pcb_file_path:
+        return layer_names
+
+    try:
+        enabled_layers = get_enabled_layers_from_pcb(pcb_file_path)
+        filtered_layers = [layer for layer in layer_names if layer in enabled_layers]
+
+        # Log information about filtered layers
+        logger = logging.getLogger(__name__)
+        removed_layers = [layer for layer in layer_names if layer not in enabled_layers]
+        if removed_layers:
+            logger.info(
+                f"Skipping undefined layers: {', '.join(removed_layers)} "
+                f"(not enabled in PCB)"
+            )
+        if filtered_layers:
+            logger.debug(f"Processing enabled layers: {', '.join(filtered_layers)}")
+
+        return filtered_layers
+
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Could not detect PCB layers, processing all requested: {e}")
+        return layer_names
 
 
 def suggest_layer_presets() -> dict[str, list[str]]:

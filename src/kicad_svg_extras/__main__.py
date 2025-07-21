@@ -18,6 +18,7 @@ from kicad_svg_extras.colors import (
     resolve_net_color,
 )
 from kicad_svg_extras.layers import (
+    filter_layers_by_pcb_availability,
     get_copper_layers,
     get_non_copper_layers,
     parse_layer_list,
@@ -251,6 +252,12 @@ def main():
     invalid_layers = validate_layers(layer_list)
     if invalid_layers:
         logger.error(f"Invalid layer names: {', '.join(invalid_layers)}")
+        sys.exit(1)
+
+    # Filter layers based on what's actually enabled in the PCB
+    layer_list = filter_layers_by_pcb_availability(layer_list, str(args.pcb_file))
+    if not layer_list:
+        logger.error("No enabled layers found in PCB file")
         sys.exit(1)
 
     # Separate copper and non-copper layers
