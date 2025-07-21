@@ -61,7 +61,18 @@ jobs:
         pip install -e .
 
     - name: Run functional tests
-      run: pytest -m functional --cov kicad_svg_extras tests/
+      run: |
+        pytest -m functional --cov kicad_svg_extras \
+          --html=output_test/functional_report.html --self-contained-html tests/
+      continue-on-error: true
+
+    - name: Upload functional test report
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: functional-test-report
+        path: output_test/functional_report.html
+        retention-days: 7
 
     - name: Coverage
       run: |
