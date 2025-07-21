@@ -1,0 +1,119 @@
+/* General Report Styles */
+.report-header {
+    margin: 15px 0;
+    font-size: 1.2em;
+}
+
+/* SVG Display Styles */
+.svg-flex-container {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    justify-content: flex-start !important;
+    align-items: flex-start !important;
+    width: 100% !important;
+    margin: 10px 0 !important;
+}
+
+.svg-item-container {
+    flex: 0 1 auto;
+    margin: 8px;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    min-width: 280px;
+    max-width: 450px;
+    box-sizing: border-box;
+}
+
+.svg-item-title {
+    font-weight: bold;
+    margin-bottom: 8px;
+    text-align: center;
+    font-size: 0.9em;
+}
+
+.svg-item-content {
+    text-align: center;
+    background: #f9f9f9;
+    padding: 8px;
+    border-radius: 3px;
+}
+
+.svg-item-info {
+    font-size: 0.75em;
+    color: #666;
+    margin-top: 5px;
+    text-align: center;
+}
+
+/* Error Display Styles */
+.error-item-container {
+    flex: 0 1 auto;
+    margin: 8px;
+    padding: 10px;
+    border: 1px solid #dc3545;
+    border-radius: 5px;
+    min-width: 280px;
+    max-width: 450px;
+    box-sizing: border-box;
+}
+
+.error-item-title {
+    color: #dc3545;
+    text-align: center;
+    font-size: 0.9em;
+}
+
+/* CLI Output Styles */
+.cli-output-container {
+    margin: 10px 0;
+    border: 2px solid #28a745; /* Default success border */
+    border-radius: 5px;
+    padding: 15px;
+}
+
+.cli-output-container.failed {
+    border-color: #dc3545;
+}
+
+.cli-output-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.cli-status-success {
+    color: #28a745;
+    font-weight: bold;
+}
+
+.cli-status-failed {
+    color: #dc3545;
+    font-weight: bold;
+}
+
+.cli-command {
+    background: #f8f9fa;
+    padding: 10px;
+    border-radius: 3px;
+    margin-bottom: 10px;
+    font-family: monospace;
+    font-size: 0.9em;
+}
+
+.cli-output-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.cli-output-pre {
+    background: #f8f9fa;
+    padding: 8px;
+    border-radius: 3px;
+    margin: 5px 0;
+    max-height: 200px;
+    overflow: auto;
+    font-size: 0.8em;
+}

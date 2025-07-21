@@ -1,0 +1,16 @@
+{
+  "net_settings": {
+    "net_colors": {
+      "GND": "red",
+      "VDD": "blue",
+      "VBAT": "green",
+      "USB_*": "#FFA500",
+      "SPI_*": "#800080",
+      "I2C_*": "#008080",
+      "UART_*": "#808080",
+      "GPIO*": "#FFB6C1",
+      "ADC*": "#DDA0DD",
+      "PWM*": "#98FB98"
+    }
+  }
+}

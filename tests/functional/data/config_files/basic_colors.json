@@ -1,0 +1,10 @@
+{
+  "net_colors": {
+    "GND": "#FF0000",
+    "VCC": "#0000FF",
+    "3V3": "#00FF00",
+    "DATA*": "#FFFF00",
+    "CLK*": "#FF00FF",
+    "RESET": "#FFA500"
+  }
+}
