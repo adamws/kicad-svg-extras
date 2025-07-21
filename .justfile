@@ -1,6 +1,15 @@
 kicad-cli := require("kicad-cli")
 
 kicad_demo := "tests/functional/data/pcb_files/simple_2layer/udb.kicad_pcb"
+has_inkview := `command -v inkview >/dev/null 2>&1 && echo "yes" || echo "no"`
+has_firefox := `command -v firefox >/dev/null 2>&1 && echo "yes" || echo "no"`
+svg_viewer := if has_inkview == "yes" {
+  "inkview"
+} else if has_firefox == "yes" {
+  "firefox"
+} else {
+  "echo 'Warning: Neither inkview nor firefox found. Cannot open SVG.'"
+}
 
 clean-venv:
   rm -rf .env
@@ -13,7 +22,13 @@ venv:
   python -m pip install -e .
   python -m pip install -r dev-requirements.txt
 
-color-demo:
+preview-svg path:
+  @if [ "${CLAUDECODE:-0}" = "1" ]; then \
+    echo "SVG content (first 20 lines):"; head -20 "{{ path }}"; \
+    else {{ svg_viewer }} "{{ path }}"; \
+  fi
+
+demo-simple2layer:
   #!/usr/bin/env bash
   set -euxo pipefail
   . .env/bin/activate
@@ -23,9 +38,9 @@ color-demo:
     --net-color "GND:red" --net-color "VCC:blue" --net-color "VPP:green" \
     --fit-to-content --background-color "black" \
     --keep-intermediates {{ kicad_demo }} output_test
-  inkview output_test/colored_F_Cu_In1_Cu_In2_Cu_B_Cu.svg
+  just preview-svg output_test/colored_F_Cu_In1_Cu_In2_Cu_B_Cu.svg
 
-color-demo-css:
+demo-simple2layer-css:
   #!/usr/bin/env bash
   set -euxo pipefail
   . .env/bin/activate
@@ -35,7 +50,7 @@ color-demo-css:
     --net-color "GND:red" --net-color "VCC:blue" --net-color "VPP:green" \
     --use-css-classes \
     --keep-intermediates {{ kicad_demo }} output_test_css
-  inkview output_test_css/colored_F_Cu_In1_Cu_In2_Cu_B_Cu.svg
+  just preview-svg output_test_css/colored_F_Cu_In1_Cu_In2_Cu_B_Cu.svg
 
 test-unit:
   hatch run test-unit

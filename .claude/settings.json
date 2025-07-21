@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(just lint)",
+      "Bash(just fmt)",
+      "Bash(just test*)",
+      "Bash(just demo*)"
+    ],
+    "deny": [
+      "Bash(just clean-venv)",
+      "Bash(rm -rf .env)",
+      "Bash(just test-functional-generate-refs)"
+    ]
+  }
+}
