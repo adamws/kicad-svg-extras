@@ -62,11 +62,11 @@ demo-simple2layer-css:
 test-unit:
   hatch run test-unit
 
-test-functional:
+test-functional filter="":
   #!/usr/bin/env bash
   set {{ bash_flags }}
   . .env/bin/activate
-  python -m pytest -m functional --html=output_test/functional_report.html --self-contained-html tests/
+  python -m pytest -m functional --html=output_test/functional_report.html --self-contained-html {{ filter }} tests/
 
 test-functional-generate-refs:
   #!/usr/bin/env bash
