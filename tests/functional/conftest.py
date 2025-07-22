@@ -50,7 +50,7 @@ def cli_runner(request):
         args: list, cwd: Optional[Path] = None, *, check: bool = True
     ) -> subprocess.CompletedProcess:
         """Run kicad-svg-extras CLI with given arguments."""
-        cmd = ["kicad-svg-extras", *args]
+        cmd = ["kicad-svg-extras", "--keep-intermediates", *args]
         result = subprocess.run(  # noqa: S603
             cmd, capture_output=True, text=True, check=check, cwd=cwd, timeout=60
         )
