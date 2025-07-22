@@ -39,6 +39,13 @@
     border-radius: 3px;
 }
 
+.svg-item-content svg {
+    max-width: 300px;
+    height: auto;
+    display: block;
+    margin: 0 auto;
+}
+
 .svg-item-info {
     font-size: 0.75em;
     color: #666;

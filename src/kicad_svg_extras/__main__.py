@@ -127,11 +127,11 @@ def main():
         help="Set the logging level (default: INFO)",
     )
     parser.add_argument(
-        "--fit-to-content",
+        "--no-fit-to-content",
         action="store_true",
         help=(
-            "Remove unnecessary margins from final SVG by fitting to content. "
-            "Requires Inkscape to be available in PATH."
+            "Disable automatic fitting of SVG to content bounds "
+            "(keeps original large canvas)"
         ),
     )
     parser.add_argument(
@@ -340,8 +340,8 @@ def main():
     try:
         merge_svg_files(all_svgs_to_merge, output_file)
 
-        # Fit to content if requested (before adding background)
-        if args.fit_to_content:
+        # Fit to content by default (before adding background)
+        if not args.no_fit_to_content:
             try:
                 fit_svg_to_content(output_file)
             except RuntimeError as e:

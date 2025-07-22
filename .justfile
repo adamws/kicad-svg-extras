@@ -42,7 +42,7 @@ demo-simple2layer:
   kicad-svg-extras --layers "F.Cu,In1.Cu,In2.Cu,B.Cu,F.SilkS,B.SilkS,Edge.Cuts" \
     --skip-zones --log-level DEBUG \
     --net-color "GND:red" --net-color "VCC:blue" --net-color "VPP:green" \
-    --fit-to-content --background-color "black" \
+    --background-color "black" \
     --keep-intermediates {{ kicad_demo }} output_test
   just preview-svg output_test/colored*.svg
 

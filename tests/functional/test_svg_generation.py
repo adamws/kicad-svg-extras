@@ -31,7 +31,6 @@ class TestSVGGeneration:
             [
                 "--layers",
                 "F.Cu,B.Cu",
-                "--fit-to-content",
                 str(pcb_file),
                 str(output_dir),
             ]
@@ -78,7 +77,6 @@ class TestSVGGeneration:
                 [
                     "--layers",
                     layers_str,
-                    "--fit-to-content",
                     str(pcb_file),
                     str(output_dir),
                 ]
@@ -121,7 +119,6 @@ class TestSVGGeneration:
                 "F.Cu,B.Cu",
                 "--colors",
                 str(sample_configs["basic"]),
-                "--fit-to-content",
                 str(pcb_file),
                 str(output_dir),
             ]

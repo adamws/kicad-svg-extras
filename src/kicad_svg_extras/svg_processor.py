@@ -5,7 +5,6 @@
 
 import logging
 import re
-import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Optional
@@ -17,6 +16,208 @@ logger = logging.getLogger(__name__)
 # SVG namespace
 SVG_NS = "http://www.w3.org/2000/svg"
 ET.register_namespace("", SVG_NS)
+
+
+def _parse_svg_number(value: str) -> float:
+    """Parse SVG numeric value, handling units and percentages.
+
+    Args:
+        value: SVG attribute value (e.g., '100', '10.5mm', '50%')
+
+    Returns:
+        Numeric value (units stripped, percentages not supported)
+    """
+    if not value:
+        return 0.0
+
+    # Remove common SVG units - we assume all are in the same coordinate system
+    value = re.sub(r"(px|mm|cm|pt|pc|in|em|ex|%)", "", value.strip())
+
+    try:
+        return float(value)
+    except ValueError:
+        return 0.0
+
+
+def _parse_transform(transform_attr: str) -> tuple[float, float, float, float]:
+    """Parse SVG transform attribute and return bounding box adjustments.
+
+    Args:
+        transform_attr: SVG transform attribute value
+
+    Returns:
+        Tuple of (min_x_offset, min_y_offset, max_x_offset, max_y_offset)
+    """
+    if not transform_attr:
+        return (0.0, 0.0, 0.0, 0.0)
+
+    # Simple implementation - handle translate() which is most common in KiCad SVGs
+    translate_match = re.search(
+        r"translate\(\s*(-?[\d.]+)(?:\s*,\s*(-?[\d.]+))?\s*\)", transform_attr
+    )
+    if translate_match:
+        tx = float(translate_match.group(1))
+        ty = float(translate_match.group(2)) if translate_match.group(2) else 0.0
+        return (tx, ty, tx, ty)
+
+    # For other transforms, return no offset (conservative approach)
+    return (0.0, 0.0, 0.0, 0.0)
+
+
+def _get_element_bounds(
+    element: ET.Element,
+) -> Optional[tuple[float, float, float, float]]:
+    """Calculate bounding box for a single SVG element.
+
+    Args:
+        element: SVG element to analyze
+
+    Returns:
+        Tuple of (min_x, max_x, min_y, max_y) or None if element has no bounds
+    """
+    tag = (
+        element.tag.replace(f"{{{SVG_NS}}}", "")
+        if SVG_NS in element.tag
+        else element.tag
+    )
+
+    # Handle different element types
+    if tag == "rect":
+        x = _parse_svg_number(element.get("x", "0"))
+        y = _parse_svg_number(element.get("y", "0"))
+        width = _parse_svg_number(element.get("width", "0"))
+        height = _parse_svg_number(element.get("height", "0"))
+        return (x, x + width, y, y + height)
+
+    elif tag == "circle":
+        cx = _parse_svg_number(element.get("cx", "0"))
+        cy = _parse_svg_number(element.get("cy", "0"))
+        r = _parse_svg_number(element.get("r", "0"))
+        return (cx - r, cx + r, cy - r, cy + r)
+
+    elif tag == "ellipse":
+        cx = _parse_svg_number(element.get("cx", "0"))
+        cy = _parse_svg_number(element.get("cy", "0"))
+        rx = _parse_svg_number(element.get("rx", "0"))
+        ry = _parse_svg_number(element.get("ry", "0"))
+        return (cx - rx, cx + rx, cy - ry, cy + ry)
+
+    elif tag == "line":
+        x1 = _parse_svg_number(element.get("x1", "0"))
+        y1 = _parse_svg_number(element.get("y1", "0"))
+        x2 = _parse_svg_number(element.get("x2", "0"))
+        y2 = _parse_svg_number(element.get("y2", "0"))
+        return (min(x1, x2), max(x1, x2), min(y1, y2), max(y1, y2))
+
+    elif tag == "path":
+        # Parse path data for bounds (simplified approach)
+        d = element.get("d", "")
+        if not d:
+            return None
+
+        # Extract all coordinate numbers from path data
+        coords = re.findall(r"-?[\d.]+", d)
+        min_coords_required = 2
+        if len(coords) < min_coords_required:
+            return None
+
+        try:
+            coords = [float(c) for c in coords]
+            x_coords = coords[::2]  # Even indices are x coordinates
+            y_coords = coords[1::2]  # Odd indices are y coordinates
+
+            if x_coords and y_coords:
+                return (min(x_coords), max(x_coords), min(y_coords), max(y_coords))
+        except (ValueError, IndexError):
+            pass
+
+    elif tag in ["text", "tspan"]:
+        # For text elements, use position as point
+        x = _parse_svg_number(element.get("x", "0"))
+        y = _parse_svg_number(element.get("y", "0"))
+        # Rough estimate: assume text is 10 units wide and high
+        return (x, x + 10, y - 5, y + 5)
+
+    # Element type not handled or no position info
+    return None
+
+
+def calculate_svg_bounding_box(
+    svg_file: Path, margin: float = 1.0
+) -> Optional[tuple[float, float, float, float]]:
+    """Calculate the bounding box of all drawable content in an SVG file.
+
+    Args:
+        svg_file: Path to SVG file to analyze
+        margin: Margin to add around content bounds (in SVG units, typically mm)
+
+    Returns:
+        Tuple of (min_x, max_x, min_y, max_y) including margin, or None if no content
+    """
+    try:
+        tree = ET.parse(svg_file)
+        root = tree.getroot()
+
+        bounds_list = []
+
+        def collect_bounds(
+            element: ET.Element, transform_stack: Optional[list] = None
+        ) -> None:
+            """Recursively collect bounds from all elements."""
+            if transform_stack is None:
+                transform_stack = []
+
+            # Get transform for this element
+            current_transform = element.get("transform", "")
+            if current_transform:
+                transform_stack.append(_parse_transform(current_transform))
+
+            # Calculate bounds for this element
+            element_bounds = _get_element_bounds(element)
+            if element_bounds is not None:
+                min_x, max_x, min_y, max_y = element_bounds
+
+                # Apply all transforms in stack
+                for tx_offset, ty_offset, _, _ in transform_stack:
+                    min_x += tx_offset
+                    max_x += tx_offset
+                    min_y += ty_offset
+                    max_y += ty_offset
+
+                bounds_list.append((min_x, max_x, min_y, max_y))
+
+            # Recurse into child elements
+            for child in element:
+                collect_bounds(child, transform_stack.copy())
+
+        # Collect bounds from all elements
+        collect_bounds(root)
+
+        if not bounds_list:
+            logger.debug(f"No drawable content found in {svg_file}")
+            return None
+
+        # Calculate overall bounding box
+        min_x = min(bounds[0] for bounds in bounds_list)
+        max_x = max(bounds[1] for bounds in bounds_list)
+        min_y = min(bounds[2] for bounds in bounds_list)
+        max_y = max(bounds[3] for bounds in bounds_list)
+
+        # Add margin
+        min_x -= margin
+        max_x += margin
+        min_y -= margin
+        max_y += margin
+
+        logger.debug(
+            f"Calculated SVG bounds: "
+            f"({min_x:.3f}, {max_x:.3f}, {min_y:.3f}, {max_y:.3f})"
+        )
+        return (min_x, max_x, min_y, max_y)
+
+    except Exception as e:
+        logger.warning(f"Failed to calculate SVG bounding box for {svg_file}: {e}")
+        return None
 
 
 def extract_css_styles(svg_content: str) -> str:
@@ -223,45 +424,58 @@ def add_background_to_svg(svg_file: Path, background_color: str) -> None:
         tree.write(svg_file, encoding="unicode")
 
 
-def fit_svg_to_content(svg_file: Path) -> None:
-    """Fit SVG to content by removing unnecessary margins using Inkscape.
+def fit_svg_to_content(svg_file: Path, margin: float = 1.0) -> None:
+    """Fit SVG to content by updating viewBox and dimensions to content bounds.
 
     Args:
         svg_file: Path to SVG file to process in-place
+        margin: Margin to add around content bounds (in SVG units, typically mm)
 
     Raises:
-        RuntimeError: If Inkscape is not available or command fails
+        RuntimeError: If SVG processing fails
     """
-    # Check if Inkscape is available
-    try:
-        cmd = ["inkscape", "--version"]
-        result = subprocess.run(  # noqa: S603
-            cmd, check=False, capture_output=True, text=True
+    # Calculate content bounding box
+    bounds = calculate_svg_bounding_box(svg_file, margin)
+
+    if bounds is None:
+        logger.warning(
+            f"No drawable content found in {svg_file}, skipping fit-to-content"
         )
-        if result.returncode != 0:
-            msg = "Inkscape is not available in PATH"
-            raise RuntimeError(msg)
-    except FileNotFoundError as e:
-        msg = "Inkscape is not available in PATH"
+        return
+
+    min_x, max_x, min_y, max_y = bounds
+    width = max_x - min_x
+    height = max_y - min_y
+
+    # Ensure minimum dimensions to avoid tiny/invisible SVGs
+    min_size = 5.0  # 5mm minimum
+    if width < min_size:
+        center_x = (min_x + max_x) / 2
+        min_x = center_x - min_size / 2
+        max_x = center_x + min_size / 2
+        width = min_size
+
+    if height < min_size:
+        center_y = (min_y + max_y) / 2
+        min_y = center_y - min_size / 2
+        max_y = center_y + min_size / 2
+        height = min_size
+
+    try:
+        # Update SVG file with new dimensions
+        tree = ET.parse(svg_file)
+        root = tree.getroot()
+
+        # Update viewBox and dimensions
+        root.set("viewBox", f"{min_x} {min_y} {width} {height}")
+        root.set("width", f"{width}mm")
+        root.set("height", f"{height}mm")
+
+        # Write back to file
+        tree.write(svg_file, encoding="unicode")
+
+        logger.info(f"Fitted SVG to content: {svg_file} -> {width:.3f}x{height:.3f}mm")
+
+    except Exception as e:
+        msg = f"Failed to update SVG dimensions: {e}"
         raise RuntimeError(msg) from e
-
-    # Use Inkscape to fit page to content
-    cmd = [
-        "inkscape",
-        "--export-type=svg",
-        "--export-area-drawing",
-        "--export-margin=1",  # Small margin to avoid clipping
-        "--export-filename=" + str(svg_file),
-        str(svg_file),
-    ]
-
-    logger.debug(f"Running Inkscape command: {' '.join(cmd)}")
-
-    result = subprocess.run(  # noqa: S603
-        cmd, check=False, capture_output=True, text=True
-    )
-    if result.returncode != 0:
-        msg = f"Inkscape failed: {result.stderr}"
-        raise RuntimeError(msg)
-
-    logger.info(f"Fitted SVG to content: {svg_file}")

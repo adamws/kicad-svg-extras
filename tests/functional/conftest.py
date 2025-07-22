@@ -3,20 +3,13 @@
 # SPDX-License-Identifier: MIT
 """Pytest configuration and fixtures for functional tests."""
 
-import re
 import shutil
 import subprocess
 import tempfile
-import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Optional
 
 import pytest
-
-try:
-    import svgpathtools
-except ImportError:
-    svgpathtools = None
 
 # We'll use the plugin manager to check for pytest-html availability
 
@@ -99,6 +92,23 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "slow: mark test as slow running")
 
 
+@pytest.hookimpl(tryfirst=True)
+def pytest_html_report_title(report):
+    """Customize HTML report title."""
+    report.title = "KiCad SVG Extras - Functional Test Report"
+
+
+def pytest_html_results_summary(prefix, summary, postfix):  # noqa: ARG001
+    """Add custom CSS to the HTML report results."""
+    css_path = FUNCTIONAL_DIR / "report.css"
+    if css_path.exists():
+        with open(css_path) as f:
+            custom_css = f.read()
+
+        # Insert CSS as a style tag in the prefix
+        prefix.extend([f'<style type="text/css">\n{custom_css}\n</style>'])
+
+
 def pytest_collection_modifyitems(config, items):  # noqa: ARG001
     """Modify test collection to handle PCB file requirements."""
     skip_pcb_tests = pytest.mark.skip(reason="PCB file not provided yet")
@@ -147,6 +157,16 @@ def pytest_runtest_makereport(item, call):  # noqa: ARG001
         report.extras = extras
 
 
+def _scale_svg_for_html_display(svg_content: str) -> str:
+    """Scale SVG content for HTML display by replacing mm with cm units.
+
+    This scaling is applied only for HTML display purposes and does not modify
+    the original SVG files on disk.
+    """
+    # Simply replace mm with cm to scale down by factor of 10
+    return svg_content.replace('mm"', 'cm"')
+
+
 def _add_all_svg_files_to_report(
     extras: list, output_dirs: list, test_name: str, pytest_html
 ) -> None:
@@ -180,8 +200,8 @@ def _add_all_svg_files_to_report(
             # Read SVG content
             svg_content = svg_file.read_text(encoding="utf-8")
 
-            # Shrink to content bounds and prepare for HTML display
-            display_svg_content = _shrink_svg_to_content(svg_content)
+            # Apply scaling for HTML display only
+            display_svg_content = _scale_svg_for_html_display(svg_content)
 
             # Create individual SVG item with source directory info
             svg_item = (
@@ -212,75 +232,6 @@ def _add_all_svg_files_to_report(
             f'<div class="svg-flex-container">{" ".join(svg_items_html)}</div>'
         )
         extras.append(pytest_html.extras.html(flex_container))
-
-
-def _shrink_svg_to_content(svg_content: str, margin: int = 1) -> str:
-    """Shrink SVG to content bounds using svgpathtools."""
-    if svgpathtools is None:
-        # svgpathtools not available, return SVG with basic styling
-        converted_content = re.sub(
-            r"<svg([^>]*)>",
-            r'<svg\1 style="width: 100%; height: auto; display: block;">',
-            svg_content,
-        )
-        return converted_content
-
-    # Parse SVG content
-    root = ET.fromstring(svg_content)
-
-    # Get all paths from the SVG
-    paths = svgpathtools.document.flattened_paths(root)
-
-    if not paths:
-        # No paths found, return cleaned SVG without bbox modification
-        converted_content = svg_content
-        # Add CSS styling
-        converted_content = re.sub(
-            r"<svg([^>]*)>",
-            r'<svg\1 style="width: 100%; height: auto; display: block;">',
-            converted_content,
-        )
-        return converted_content
-
-    # Calculate bounding box
-    bbox = paths[0].bbox()
-    for path in paths[1:]:
-        path_bbox = path.bbox()
-        bbox = (
-            min(bbox[0], path_bbox[0]),  # min_x
-            max(bbox[1], path_bbox[1]),  # max_x
-            min(bbox[2], path_bbox[2]),  # min_y
-            max(bbox[3], path_bbox[3]),  # max_y
-        )
-
-    # Add margin
-    bbox = (
-        bbox[0] - margin,
-        bbox[1] + margin,
-        bbox[2] - margin,
-        bbox[3] + margin,
-    )
-
-    # Update SVG attributes
-    width = bbox[1] - bbox[0]
-    height = bbox[3] - bbox[2]
-
-    # Scale factor for HTML display
-    scale_factor = 4
-    display_width = width * scale_factor / 10  # Convert mm to cm and scale
-    display_height = height * scale_factor / 10
-
-    # Update root element
-    root.set("viewBox", f"{bbox[0]} {bbox[2]} {width} {height}")
-    root.set("width", f"{display_width:.3f}cm")
-    root.set("height", f"{display_height:.3f}cm")
-
-    # Add CSS styling
-    root.set("style", "width: 100%; height: auto; display: block;")
-
-    # Convert back to string and clean up
-    converted_content = ET.tostring(root, encoding="unicode")
-    return converted_content
 
 
 def _add_cli_outputs_to_report(
