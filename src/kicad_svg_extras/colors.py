@@ -558,7 +558,7 @@ def apply_color_to_svg(svg_file: Path, net_color: str, output_file: Path) -> Non
     current_color = find_copper_color_in_svg(svg_file)
     if not current_color:
         logger.warning(
-            f"Could not detect copper color in {svg_file}, skipping CSS processing"
+            f"Could not detect copper color in {svg_file}, skipping color processing"
         )
         # If we can't detect the color, just copy the file without modification
         shutil.copy2(svg_file, output_file)
