@@ -21,7 +21,6 @@ from kicad_svg_extras.layers import (
     get_copper_layers,
     get_non_copper_layers,
     parse_layer_list,
-    sort_layers_by_stackup,
     validate_layers,
 )
 from kicad_svg_extras.logging import setup_logging
@@ -132,14 +131,6 @@ def main():
         help=(
             "Disable automatic fitting of SVG to content bounds "
             "(keeps original large canvas)"
-        ),
-    )
-    parser.add_argument(
-        "--reverse-stackup",
-        action="store_true",
-        help=(
-            "Reverse the layer stacking order for bottom-to-front view. "
-            "Default is front-to-back (top-down view)."
         ),
     )
 
@@ -290,7 +281,6 @@ def main():
         keep_pcb=args.keep_intermediates,
         skip_zones=args.skip_zones,
         use_css_classes=args.use_css_classes,
-        reverse_stackup=args.reverse_stackup,
     )
 
     unique_svgs = len(set(net_svgs.values()))
@@ -298,14 +288,18 @@ def main():
         f"Generated {unique_svgs} color-grouped SVGs covering {len(net_svgs)} nets"
     )
 
-    # Collect unique intermediate SVGs (already colored during generation)
-    copper_svgs = list(set(net_svgs.values()))
+    # Collect unique intermediate SVGs preserving user-specified layer order
+    seen = set()
+    copper_svgs = []
+    # Process layers in user-specified order to maintain proper stacking
+    for layer in copper_layers:
+        for svg_path in net_svgs.values():
+            if svg_path not in seen and layer.replace(".", "_") in svg_path.name:
+                seen.add(svg_path)
+                copper_svgs.append(svg_path)
 
     # Generate SVGs for non-copper layers and build proper layering order
     all_svgs_to_merge = []
-
-    # Sort all layers by stackup order for proper rendering
-    sorted_layers = sort_layers_by_stackup(layer_list, reverse=args.reverse_stackup)
 
     # Add all copper SVGs first (they're already generated and colored)
     all_svgs_to_merge.extend(copper_svgs)
@@ -322,15 +316,14 @@ def main():
             logger.warning(f"Failed to generate {layer_name} SVG: {e}")
 
     # Now rebuild the list in proper stackup order
-    logger.debug(f"Building final SVG merge order from {len(sorted_layers)} layers")
-    logger.debug(f"Layer stackup order: {sorted_layers}")
+    logger.debug(f"Building final SVG merge order from {len(layer_list)} layers")
     logger.debug(f"Copper layers to merge: {copper_layers}")
     logger.debug(f"Non-copper layers available: {list(non_copper_svgs.keys())}")
 
     all_svgs_to_merge = []
     copper_added = False
 
-    for layer_name in sorted_layers:
+    for layer_name in layer_list:
         if layer_name in copper_layers:
             # Add copper SVGs in the position of the first copper layer
             if copper_svgs and not copper_added:
@@ -351,7 +344,7 @@ def main():
             all_svgs_to_merge.append(non_copper_svgs[layer_name])
 
     # Create merged SVG with proper layer ordering
-    layer_suffix = "_".join(copper_layers).replace(".", "_")
+    layer_suffix = "_".join(layer_list).replace(".", "_")
     output_file = args.output_dir / f"colored_{layer_suffix}.svg"
 
     try:

@@ -45,8 +45,24 @@ class TestSVGGeneration:
         # Copy to references if flag is set
         capture_outputs.copy_to_references("basic", pcb_file.stem)
 
+    @pytest.mark.parametrize(
+        "layers,test_name",
+        [
+            (["F.Cu"], "front_copper_only"),
+            (["B.Cu"], "back_copper_only"),
+            (["F.Cu", "B.Cu"], "front_back_copper"),
+            (["F.Cu", "B.Cu", "B.SilkS"], "copper_with_back_silk"),
+            (["F.Cu", "B.Cu", "B.SilkS", "Edge.Cuts"], "full_layer_stack"),
+        ],
+    )
     def test_layer_combinations(
-        self, cli_runner, temp_output_dir, pcb_files_dir, capture_outputs
+        self,
+        cli_runner,
+        temp_output_dir,
+        pcb_files_dir,
+        capture_outputs,
+        layers,
+        test_name,
     ):
         """Test various layer combinations."""
         pcb_files = list(pcb_files_dir.glob("**/*.kicad_pcb"))
@@ -55,43 +71,32 @@ class TestSVGGeneration:
 
         pcb_file = pcb_files[0]
 
-        # Test different layer combinations
-        layer_combinations = [
-            ["F.Cu"],
-            ["B.Cu"],
-            ["F.Cu", "B.Cu"],
-            ["F.Cu", "B.Cu", "F.SilkS"],
-            ["F.Cu", "B.Cu", "F.SilkS", "Edge.Cuts"],
-        ]
+        # Create unique output directory for this specific test case
+        output_dir = temp_output_dir / f"layers_{test_name}"
+        layers_str = ",".join(layers)
 
-        for layers in layer_combinations:
-            output_dir = (
-                temp_output_dir / f"layers_{'_'.join(layers).replace('.', '_')}"
-            )
-            layers_str = ",".join(layers)
+        # Register output directory for HTML report capture
+        capture_outputs(output_dir)
 
-            # Register output directory for HTML report capture
-            capture_outputs(output_dir)
+        result = cli_runner(
+            [
+                "--layers",
+                layers_str,
+                str(pcb_file),
+                str(output_dir),
+            ]
+        )
 
-            result = cli_runner(
-                [
-                    "--layers",
-                    layers_str,
-                    str(pcb_file),
-                    str(output_dir),
-                ]
-            )
+        assert result.returncode == 0, f"Failed for layers {layers}: {result.stderr}"
 
-            assert (
-                result.returncode == 0
-            ), f"Failed for layers {layers}: {result.stderr}"
+        # Verify output files exist
+        svg_files = list(output_dir.glob("*.svg"))
+        assert len(svg_files) > 0, f"No SVG files generated for layers: {layers}"
 
-            # Verify output files exist
-            svg_files = list(output_dir.glob("*.svg"))
-            assert len(svg_files) > 0, f"No SVG files generated for layers: {layers}"
-
-        # Copy to references if flag is set
-        capture_outputs.copy_to_references("layer_combinations", pcb_file.stem)
+        # Copy to references if flag is set (with unique name)
+        capture_outputs.copy_to_references(
+            f"layer_combinations_{test_name}", pcb_file.stem
+        )
 
     def test_color_application(
         self,

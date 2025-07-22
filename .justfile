@@ -39,6 +39,7 @@ demo-simple2layer:
   set {{ bash_flags }}
   . .env/bin/activate
   rm -rf output_test
+  # copper layers listed from front to bottom order, which means that bottom will be on top (first visible)
   kicad-svg-extras --layers "F.Cu,In1.Cu,In2.Cu,B.Cu,F.SilkS,B.SilkS,Edge.Cuts" \
     --skip-zones --log-level DEBUG \
     --net-color "GND:red" --net-color "VCC:blue" --net-color "VPP:green" \

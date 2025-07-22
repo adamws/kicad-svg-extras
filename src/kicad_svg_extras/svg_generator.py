@@ -15,7 +15,7 @@ from kicad_svg_extras.colors import (
     apply_css_class_to_svg,
     find_copper_color_in_svg,
 )
-from kicad_svg_extras.layers import get_copper_layers, sort_layers_by_stackup
+from kicad_svg_extras.layers import get_copper_layers
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +58,6 @@ def generate_color_grouped_svgs(
     keep_pcb: bool = False,
     skip_zones: bool = False,
     use_css_classes: bool = False,
-    reverse_stackup: bool = False,
 ) -> dict[str, Path]:
     """Generate SVGs grouped by color for optimization, or individual SVGs for CSS."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -100,7 +99,6 @@ def generate_color_grouped_svgs(
             net_colors,
             keep_pcb=keep_pcb,
             skip_zones=skip_zones,
-            reverse_stackup=reverse_stackup,
         )
 
 
@@ -115,12 +113,9 @@ def _generate_individual_net_svgs_per_layer(
     skip_zones: bool,
 ) -> dict[str, Path]:
     """Generate individual SVG per net with CSS classes, processing each layer."""
-    # Sort layers by stackup order for proper merging
-    sorted_copper_layers = sort_layers_by_stackup(copper_layers)
-
     # Generate individual net SVGs for each layer separately
     layer_svgs: list[Path] = []
-    for layer_name in sorted_copper_layers:
+    for layer_name in copper_layers:
         layer_net_svgs = _generate_individual_net_svgs_single_layer(
             pcb_file,
             layer_name,
@@ -220,17 +215,11 @@ def _generate_grouped_net_svgs_per_layer(
     *,
     keep_pcb: bool,
     skip_zones: bool,
-    reverse_stackup: bool = False,
 ) -> dict[str, Path]:
     """Generate SVGs grouped by color, processing each layer separately then merging."""
-    # Sort layers by stackup order for proper merging
-    sorted_copper_layers = sort_layers_by_stackup(
-        copper_layers, reverse=reverse_stackup
-    )
-
-    # Generate colored SVGs for each layer separately
+    # Process layers in user-specified order
     all_layer_svgs = []
-    for layer_name in sorted_copper_layers:
+    for layer_name in copper_layers:
         layer_net_svgs = _generate_grouped_net_svgs_single_layer(
             pcb_file,
             layer_name,
