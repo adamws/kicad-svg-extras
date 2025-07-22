@@ -275,6 +275,13 @@ def merge_svg_files(
         msg = "No SVG files to merge"
         raise ValueError(msg)
 
+    logger.debug(f"Starting merge of {len(svg_files)} SVG files into {output_file}")
+    logger.debug("SVG merge order:")
+    for i, svg_file in enumerate(svg_files):
+        logger.debug(f"  {i+1:2d}. {svg_file.name}")
+    if base_svg:
+        logger.debug(f"  Base SVG: {base_svg.name}")
+
     # Validate that all SVG files have identical dimensions and viewBox
     all_files = []
     if base_svg and base_svg.exists():
@@ -356,9 +363,12 @@ width="{reference_width}" height="{reference_height}" viewBox="{reference_viewbo
         svg_content += f"<style>\n{merged_css}\n</style>\n"
 
     # Extract content from all SVG files
-    for svg_file in svg_files:
+    for i, svg_file in enumerate(svg_files):
         if not svg_file.exists():
+            logger.debug(f"  Skipping non-existent file: {svg_file.name}")
             continue
+
+        logger.debug(f"  Merging layer {i+1}/{len(svg_files)}: {svg_file.name}")
 
         with open(svg_file) as f:
             content = f.read()
@@ -374,13 +384,26 @@ width="{reference_width}" height="{reference_height}" viewBox="{reference_viewbo
                 f'fill="{DEFAULT_BACKGROUND_DARK}"' not in group_content
                 and "<style>" not in group_content
             ):
+                logger.debug(
+                    f"    Added content from {svg_file.name} "
+                    f"({len(group_content)} chars)"
+                )
                 svg_content += group_content + "\n"
+            else:
+                logger.debug(
+                    f"    Skipped background/style content from {svg_file.name}"
+                )
+        else:
+            logger.debug(f"    No valid <g> content found in {svg_file.name}")
 
     svg_content += "</svg>"
 
     # Write merged SVG
     with open(output_file, "w") as f:
         f.write(svg_content)
+
+    logger.debug(f"Successfully merged {len(svg_files)} SVG files into {output_file}")
+    logger.debug(f"Final merged SVG size: {len(svg_content):,} characters")
 
 
 def add_background_to_svg(svg_file: Path, background_color: str) -> None:

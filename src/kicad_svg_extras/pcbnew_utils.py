@@ -130,6 +130,9 @@ def create_filtered_pcb(
     skip_zones: bool = False,
 ) -> None:
     """Create a new PCB file with only the specified nets."""
+    logger.debug(f"Creating filtered PCB for nets: {sorted(net_names)}")
+    logger.debug(f"  Source: {pcb_file.name}")
+    logger.debug(f"  Output: {output_file.name}")
 
     # Create a copy of the board by copying the original file first
     shutil.copy2(pcb_file, output_file)
@@ -182,16 +185,36 @@ def create_filtered_pcb(
         new_board.RemoveNative(footprint)
 
     # Remove zones not matching specified nets
+    total_zones = len(list(new_board.Zones()))
     if skip_zones:
         zones_to_remove = list(new_board.Zones())
+        logger.debug(f"  Removing all {total_zones} zones (skip_zones=True)")
     else:
         zones_to_remove = []
+        zones_kept = []
         for zone in new_board.Zones():
+            zone_net = new_board.FindNet(zone.GetNetCode())
+            zone_net_name = zone_net.GetNetname() if zone_net else "<unknown>"
+
             if zone.GetNetCode() not in net_codes_to_keep:
                 zones_to_remove.append(zone)
+                logger.debug(
+                    f"  Removing zone on net '{zone_net_name}' (not in target nets)"
+                )
+            else:
+                zones_kept.append(zone_net_name)
+                logger.debug(f"  Keeping zone on net '{zone_net_name}'")
+
+        if zones_kept:
+            logger.debug(f"  Zones kept for nets: {zones_kept}")
 
     for zone in zones_to_remove:
         new_board.RemoveNative(zone)
+
+    logger.debug(
+        f"  Zone processing: {total_zones} total, {len(zones_to_remove)} removed, "
+        f"{total_zones - len(zones_to_remove)} kept"
+    )
 
     # Remove drawings (text, shapes) on copper layers unless processing no-net
     # Text elements don't have nets, so they should only appear in no-net SVG

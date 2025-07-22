@@ -291,6 +291,7 @@ def _generate_grouped_net_svgs_single_layer(
             f"Processing {len(default_nets)} nets with default colors on "
             f"{layer_name}..."
         )
+        logger.debug(f"  Default color nets on {layer_name}: {default_nets}")
         layer_suffix = layer_name.replace(".", "_")
         default_svg = output_dir / f"default_nets_{layer_suffix}.svg"
         pcb_file_path = output_dir / f"default_nets_{layer_suffix}.kicad_pcb"
@@ -318,6 +319,7 @@ def _generate_grouped_net_svgs_single_layer(
             f"Processing {len(nets_with_color)} nets with color {color} on "
             f"{layer_name}..."
         )
+        logger.debug(f"  {color} nets on {layer_name}: {nets_with_color}")
         # Create safe filename from color hex
         safe_color = color.replace("#", "color_").replace("/", "_").replace("\\", "_")
         layer_suffix = layer_name.replace(".", "_")

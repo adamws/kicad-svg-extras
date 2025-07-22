@@ -322,15 +322,32 @@ def main():
             logger.warning(f"Failed to generate {layer_name} SVG: {e}")
 
     # Now rebuild the list in proper stackup order
+    logger.debug(f"Building final SVG merge order from {len(sorted_layers)} layers")
+    logger.debug(f"Layer stackup order: {sorted_layers}")
+    logger.debug(f"Copper layers to merge: {copper_layers}")
+    logger.debug(f"Non-copper layers available: {list(non_copper_svgs.keys())}")
+
     all_svgs_to_merge = []
+    copper_added = False
+
     for layer_name in sorted_layers:
         if layer_name in copper_layers:
             # Add copper SVGs in the position of the first copper layer
-            if copper_svgs:
+            if copper_svgs and not copper_added:
+                logger.debug(
+                    f"Adding {len(copper_svgs)} copper layer SVGs at position of "
+                    f"{layer_name}"
+                )
+                for j, copper_svg in enumerate(copper_svgs):
+                    logger.debug(f"  Copper {j+1}: {copper_svg.name}")
                 all_svgs_to_merge.extend(copper_svgs)
-                copper_svgs = []  # Only add them once
+                copper_added = True
         elif layer_name in non_copper_svgs:
             # Add non-copper layer SVG
+            logger.debug(
+                f"Adding non-copper layer: {layer_name} -> "
+                f"{non_copper_svgs[layer_name].name}"
+            )
             all_svgs_to_merge.append(non_copper_svgs[layer_name])
 
     # Create merged SVG with proper layer ordering
