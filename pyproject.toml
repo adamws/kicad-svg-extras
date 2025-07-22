@@ -46,6 +46,7 @@ packages = ["src/kicad_svg_extras"]
 dependencies = [
   "coverage[toml]>=6.5",
   "pytest",
+  "pytest-html",
 ]
 
 [tool.hatch.envs.default.scripts]
