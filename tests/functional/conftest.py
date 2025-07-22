@@ -22,9 +22,9 @@ REFERENCES_DIR = FUNCTIONAL_DIR / "references"
 
 
 @pytest.fixture
-def temp_output_dir():
+def temp_output_dir(tmpdir):
     """Create temporary directory for test outputs."""
-    with tempfile.TemporaryDirectory() as tmp_dir:
+    with tempfile.TemporaryDirectory(dir=tmpdir, delete=False) as tmp_dir:
         yield Path(tmp_dir)
 
 
