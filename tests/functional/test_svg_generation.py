@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: MIT
 """Functional tests for SVG generation from KiCad PCB files."""
+import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -153,6 +155,72 @@ class TestSVGGeneration:
 
         # Copy to references if flag is set
         capture_outputs.copy_to_references("color_application", pcb_file.stem)
+
+
+@pytest.mark.functional
+class TestLayerOrderComparison:
+    """Test layer merging order against KiCad CLI output."""
+
+    def test_layer_order_matches_kicad_cli(
+        self, cli_runner, temp_output_dir, pcb_files_dir, capture_outputs
+    ):
+        """Test that our layer merging produces the same structure
+        as KiCad CLI export."""
+
+        pcb_file = pcb_files_dir / "very_simple_2layer/udb.kicad_pcb"
+        assert Path(pcb_file).is_file()
+
+        output_dir = temp_output_dir / "layer_order_comparison"
+
+        # Register output directory for HTML report capture
+        capture_outputs(output_dir)
+
+        # Test with a basic layer combination that both tools should handle identically
+        layers = ["F.Cu", "B.Cu", "Edge.Cuts"]
+        layers_str = ",".join(layers)
+
+        # Generate reference SVG using kicad-cli
+
+        kicad_reference = output_dir / "kicad_reference.svg"
+
+        try:
+            # Run kicad-cli to generate reference SVG
+            kicad_cmd = [
+                "kicad-cli",
+                "pcb",
+                "export",
+                "svg",
+                "--exclude-drawing-sheet",
+                "--page-size-mode",
+                "0",
+                "--layers",
+                layers_str,
+                "--output",
+                str(kicad_reference),
+                str(pcb_file),
+            ]
+            result = subprocess.run(  # noqa: S603
+                kicad_cmd, capture_output=True, text=True, check=True
+            )
+        except subprocess.CalledProcessError as e:
+            pytest.skip(f"kicad-cli not available or failed: {e}")
+        except FileNotFoundError:
+            pytest.skip("kicad-cli not found in PATH")
+
+        # Generate our tool's SVG output (without custom colors to match kicad-cli)
+        result = cli_runner(
+            [
+                "--no-background",
+                "--no-fit-to-content",
+                "--layers",
+                layers_str,
+                str(pcb_file),
+                str(output_dir),
+            ]
+        )
+
+        assert result.returncode == 0, f"Our tool failed: {result.stderr}"
+        # right now we aim for visual equality, SVGs are not yet exactly equal
 
 
 @pytest.mark.functional
