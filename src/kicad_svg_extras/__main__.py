@@ -24,7 +24,9 @@ from kicad_svg_extras.layers import (
     validate_layers,
 )
 from kicad_svg_extras.logging import setup_logging
-from kicad_svg_extras.pcbnew_utils import filter_layers_by_pcb_availability
+from kicad_svg_extras.pcbnew_utils import (
+    filter_layers_by_pcb_availability,
+)
 from kicad_svg_extras.svg_processor import (
     add_background_to_svg,
     fit_svg_to_content,
@@ -306,6 +308,7 @@ def main():
 
     # Generate SVGs for non-copper layers and insert them in proper order
     non_copper_svgs = {}
+
     for layer_name in non_copper_layers:
         layer_svg = temp_dir / f"{layer_name.replace('.', '_')}.svg"
         try:

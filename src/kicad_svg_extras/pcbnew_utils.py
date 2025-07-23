@@ -128,6 +128,7 @@ def create_filtered_pcb(
     output_file: Path,
     *,
     skip_zones: bool = False,
+    skip_through_holes: bool = False,
 ) -> None:
     """Create a new PCB file with only the specified nets."""
     logger.debug(f"Creating filtered PCB for nets: {sorted(net_names)}")
@@ -167,8 +168,18 @@ def create_filtered_pcb(
         pads_to_remove = []
 
         for pad in footprint.Pads():
+            # Check if this pad should be removed due to through hole filtering
+            is_through_hole = pad.GetAttribute() in (
+                pcbnew.PAD_ATTRIB_PTH,
+                pcbnew.PAD_ATTRIB_NPTH,
+            )
+
             if pad.GetNetCode() in net_codes_to_keep:
-                has_matching_pads = True
+                # Skip through holes if requested
+                if skip_through_holes and is_through_hole:
+                    pads_to_remove.append(pad)
+                else:
+                    has_matching_pads = True
             else:
                 pads_to_remove.append(pad)
 
@@ -245,6 +256,7 @@ def create_multi_net_pcb(
     output_file: Optional[Path] = None,
     *,
     skip_zones: bool = False,
+    skip_through_holes: bool = False,
 ) -> Path:
     """Create a PCB file with only specified nets."""
     if output_file is None:
@@ -253,7 +265,13 @@ def create_multi_net_pcb(
         os.close(fd)
         output_file = Path(temp_path)
 
-    create_filtered_pcb(pcb_file, set(net_names), output_file, skip_zones=skip_zones)
+    create_filtered_pcb(
+        pcb_file,
+        set(net_names),
+        output_file,
+        skip_zones=skip_zones,
+        skip_through_holes=skip_through_holes,
+    )
     return output_file
 
 
@@ -333,3 +351,63 @@ def filter_layers_by_pcb_availability(
     except Exception as e:
         logger.warning(f"Could not detect PCB layers, processing all requested: {e}")
         return layer_names
+
+
+def create_non_copper_filtered_pcb(
+    pcb_file: Path,
+    layer_name: str,
+    output_file: Path,
+) -> None:
+    """Create a new PCB file with through holes filtered out for non-copper layers.
+
+    This removes all through hole pads to match KiCad CLI behavior when
+    plotting multiple layers together that include non-copper layers.
+    """
+    logger.debug(f"Creating non-copper filtered PCB for {layer_name}")
+    logger.debug(f"  Source: {pcb_file.name}")
+    logger.debug(f"  Output: {output_file.name}")
+
+    # Create a copy of the board by copying the original file first
+    shutil.copy2(pcb_file, output_file)
+
+    # Load the copied board
+    new_board = pcbnew.LoadBoard(str(output_file))
+
+    # Remove through hole pads from all footprints
+    pads_removed = 0
+    for footprint in new_board.GetFootprints():
+        pads_to_remove = []
+        for pad in footprint.Pads():
+            # Check if this pad is a through hole
+            is_through_hole = pad.GetAttribute() in (
+                pcbnew.PAD_ATTRIB_PTH,
+                pcbnew.PAD_ATTRIB_NPTH,
+            )
+            if is_through_hole:
+                pads_to_remove.append(pad)
+                pads_removed += 1
+
+        # Remove through hole pads
+        for pad in pads_to_remove:
+            footprint.RemoveNative(pad)
+
+    logger.debug(f"  Removed {pads_removed} through hole pads")
+
+    # Save the modified board
+    new_board.Save(str(output_file))
+
+
+def create_non_copper_pcb(
+    pcb_file: Path,
+    layer_name: str,
+    output_file: Optional[Path] = None,
+) -> Path:
+    """Create a PCB file with through holes filtered out for non-copper layers."""
+    if output_file is None:
+        # Create temporary file
+        fd, temp_path = tempfile.mkstemp(suffix=".kicad_pcb")
+        os.close(fd)
+        output_file = Path(temp_path)
+
+    create_non_copper_filtered_pcb(pcb_file, layer_name, output_file)
+    return output_file

@@ -15,7 +15,7 @@ from kicad_svg_extras.colors import (
     apply_css_class_to_svg,
     find_copper_color_in_svg,
 )
-from kicad_svg_extras.layers import get_copper_layers
+from kicad_svg_extras.layers import get_copper_layers, is_copper_layer
 
 logger = logging.getLogger(__name__)
 
@@ -219,7 +219,9 @@ def _generate_grouped_net_svgs_per_layer(
     """Generate SVGs grouped by color, processing each layer separately then merging."""
     # Process layers in user-specified order
     all_layer_svgs = []
-    for layer_name in copper_layers:
+    for i, layer_name in enumerate(copper_layers):
+        # Skip through holes on all layers except the last one (KiCad optimization)
+        is_last_layer = i == len(copper_layers) - 1
         layer_net_svgs = _generate_grouped_net_svgs_single_layer(
             pcb_file,
             layer_name,
@@ -228,6 +230,7 @@ def _generate_grouped_net_svgs_per_layer(
             net_colors,
             keep_pcb=keep_pcb,
             skip_zones=skip_zones,
+            skip_through_holes=not is_last_layer,
         )
         # Collect unique SVGs for this layer (in order)
         unique_layer_svgs = list(set(layer_net_svgs.values()))
@@ -257,6 +260,7 @@ def _generate_grouped_net_svgs_single_layer(
     *,
     keep_pcb: bool,
     skip_zones: bool,
+    skip_through_holes: bool = False,
 ) -> dict[str, Path]:
     """Generate SVGs grouped by color for a single layer (original approach)."""
     # Group nets by their final colors
@@ -285,7 +289,11 @@ def _generate_grouped_net_svgs_single_layer(
         default_svg = output_dir / f"default_nets_{layer_suffix}.svg"
         pcb_file_path = output_dir / f"default_nets_{layer_suffix}.kicad_pcb"
         temp_pcb = pcbnew_utils.create_multi_net_pcb(
-            pcb_file, default_nets, pcb_file_path, skip_zones=skip_zones
+            pcb_file,
+            default_nets,
+            pcb_file_path,
+            skip_zones=skip_zones,
+            skip_through_holes=skip_through_holes,
         )
 
         try:
@@ -316,7 +324,11 @@ def _generate_grouped_net_svgs_single_layer(
         color_svg = output_dir / f"{safe_color}_{layer_suffix}.svg"
         pcb_file_path = output_dir / f"{safe_color}_{layer_suffix}.kicad_pcb"
         temp_pcb = pcbnew_utils.create_multi_net_pcb(
-            pcb_file, nets_with_color, pcb_file_path, skip_zones=skip_zones
+            pcb_file,
+            nets_with_color,
+            pcb_file_path,
+            skip_zones=skip_zones,
+            skip_through_holes=skip_through_holes,
         )
 
         try:
@@ -344,7 +356,11 @@ def _generate_grouped_net_svgs_single_layer(
     return net_svgs
 
 
-def generate_layer_svg(pcb_file: Path, layer_name: str, output_file: Path) -> Path:
+def generate_layer_svg(
+    pcb_file: Path,
+    layer_name: str,
+    output_file: Path,
+) -> Path:
     """Generate SVG for a specific layer.
 
     Args:
@@ -355,26 +371,20 @@ def generate_layer_svg(pcb_file: Path, layer_name: str, output_file: Path) -> Pa
     Returns:
         Path to the generated SVG file
     """
-    run_kicad_cli_svg(pcb_file, layer_name, output_file)
-    return output_file
-
-
-def generate_edge_cuts_svg(pcb_file: Path, output_file: Path) -> Path:
-    """Generate SVG for board edge cuts."""
-    return generate_layer_svg(pcb_file, "Edge.Cuts", output_file)
-
-
-def generate_silkscreen_svg(pcb_file: Path, side: str, output_file: Path) -> Path:
-    """Generate SVG for silkscreen layer."""
-    if side == "front":
-        layer_name = "F.SilkS"
-    elif side == "back":
-        layer_name = "B.SilkS"
+    if not is_copper_layer(layer_name):
+        # Create a temporary filtered PCB with through holes removed
+        temp_pcb = pcbnew_utils.create_non_copper_pcb(pcb_file, layer_name)
+        try:
+            run_kicad_cli_svg(temp_pcb, layer_name, output_file)
+        finally:
+            # Clean up temporary PCB file
+            if temp_pcb.exists():
+                temp_pcb.unlink()
     else:
-        msg = f"Invalid side: {side}. Must be 'front' or 'back'"
-        raise ValueError(msg)
+        # Copper layers use the original PCB file
+        run_kicad_cli_svg(pcb_file, layer_name, output_file)
 
-    return generate_layer_svg(pcb_file, layer_name, output_file)
+    return output_file
 
 
 def get_net_names(pcb_file: Path) -> list[str]:
