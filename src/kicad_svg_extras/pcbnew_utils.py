@@ -12,9 +12,7 @@ This module centralizes all pcbnew library interactions including:
 """
 
 import logging
-import os
 import shutil
-import tempfile
 from pathlib import Path
 from typing import Optional
 
@@ -128,7 +126,6 @@ def create_filtered_pcb(
     output_file: Path,
     *,
     skip_zones: bool = False,
-    skip_through_holes: bool = False,
 ) -> None:
     """Create a new PCB file with only the specified nets."""
     logger.debug(f"Creating filtered PCB for nets: {sorted(net_names)}")
@@ -168,18 +165,8 @@ def create_filtered_pcb(
         pads_to_remove = []
 
         for pad in footprint.Pads():
-            # Check if this pad should be removed due to through hole filtering
-            is_through_hole = pad.GetAttribute() in (
-                pcbnew.PAD_ATTRIB_PTH,
-                pcbnew.PAD_ATTRIB_NPTH,
-            )
-
             if pad.GetNetCode() in net_codes_to_keep:
-                # Skip through holes if requested
-                if skip_through_holes and is_through_hole:
-                    pads_to_remove.append(pad)
-                else:
-                    has_matching_pads = True
+                has_matching_pads = True
             else:
                 pads_to_remove.append(pad)
 
@@ -249,30 +236,13 @@ def create_filtered_pcb(
     # Save the modified board
     new_board.Save(str(output_file))
 
-
-def create_multi_net_pcb(
-    pcb_file: Path,
-    net_names: list[str],
-    output_file: Optional[Path] = None,
-    *,
-    skip_zones: bool = False,
-    skip_through_holes: bool = False,
-) -> Path:
-    """Create a PCB file with only specified nets."""
-    if output_file is None:
-        # Create temporary file
-        fd, temp_path = tempfile.mkstemp(suffix=".kicad_pcb")
-        os.close(fd)
-        output_file = Path(temp_path)
-
-    create_filtered_pcb(
-        pcb_file,
-        set(net_names),
-        output_file,
-        skip_zones=skip_zones,
-        skip_through_holes=skip_through_holes,
-    )
-    return output_file
+    # Clean up unnecessary project files created by KiCad
+    prl_file = output_file.with_suffix(".kicad_prl")
+    pro_file = output_file.with_suffix(".kicad_pro")
+    if prl_file.exists():
+        prl_file.unlink()
+    if pro_file.exists():
+        pro_file.unlink()
 
 
 def get_enabled_layers_from_pcb(pcb_file_path: str) -> list[str]:
@@ -353,61 +323,168 @@ def filter_layers_by_pcb_availability(
         return layer_names
 
 
-def create_non_copper_filtered_pcb(
-    pcb_file: Path,
-    layer_name: str,
-    output_file: Path,
-) -> None:
-    """Create a new PCB file with through holes filtered out for non-copper layers.
+def generate_svg_from_board(
+    board_file: Path,
+    layers: str,
+    output_dir: Path,
+    *,
+    skip_through_holes: bool = False,
+) -> list[Path]:
+    """Generate SVG files from a PCB file using pcbnew plotting API.
 
-    This removes all through hole pads to match KiCad CLI behavior when
-    plotting multiple layers together that include non-copper layers.
+    This implementation follows the plot_plan approach from kicad-kbplacer reference
+    to ensure proper color handling and layer processing.
+
+    Args:
+        board_file: Path to PCB file to plot
+        layers: Comma-separated layer names (e.g., "F.Cu" or "F.Cu,B.Cu")
+        output_dir: Output directory for generated SVG files
+        skip_through_holes: If True, hide drill marks/through holes in output
+
+    Returns:
+        List of generated SVG file paths
     """
-    logger.debug(f"Creating non-copper filtered PCB for {layer_name}")
-    logger.debug(f"  Source: {pcb_file.name}")
-    logger.debug(f"  Output: {output_file.name}")
+    logger.debug(f"Generating SVG from PCB file: {board_file.name}")
+    logger.debug(f"  Layers: {layers}")
+    logger.debug(f"  Output directory: {output_dir}")
 
-    # Create a copy of the board by copying the original file first
-    shutil.copy2(pcb_file, output_file)
+    # Load board directly from provided location
+    board = load_board(board_file)
+    logger.debug(f"  Loaded board: {board_file.name}")
 
-    # Load the copied board
-    new_board = pcbnew.LoadBoard(str(output_file))
+    # Parse layer names and create plot_plan (layer_name -> layer_id mapping)
+    layer_names = [layer.strip() for layer in layers.split(",")]
+    plot_plan = []
 
-    # Remove through hole pads from all footprints
-    pads_removed = 0
-    for footprint in new_board.GetFootprints():
-        pads_to_remove = []
-        for pad in footprint.Pads():
-            # Check if this pad is a through hole
-            is_through_hole = pad.GetAttribute() in (
-                pcbnew.PAD_ATTRIB_PTH,
-                pcbnew.PAD_ATTRIB_NPTH,
+    for layer_name in layer_names:
+        try:
+            # Get layer ID from board
+            layer_id = board.GetLayerID(layer_name)
+            plot_plan.append((layer_name, layer_id))
+            logger.debug(f"  Added to plot_plan: '{layer_name}' -> ID {layer_id}")
+        except Exception as e:
+            logger.warning(f"Could not map layer '{layer_name}' to layer ID: {e}")
+            continue
+
+    if not plot_plan:
+        msg = f"No valid layers found for plotting: {layers}"
+        raise RuntimeError(msg)
+
+    # Create plot controller
+    plot_controller = pcbnew.PLOT_CONTROLLER(board)
+
+    # Get the plot options and configure them
+    plot_opts = plot_controller.GetPlotOptions()
+
+    # Configure SVG-specific parameters following kicad-kbplacer approach
+    plot_opts.SetFormat(pcbnew.PLOT_FORMAT_SVG)
+    # Set output directory (use absolute path to be sure)
+    plot_opts.SetOutputDirectory(str(output_dir.absolute()))
+
+    # Set color settings - try default since kicad-cli said "user" not found
+    try:
+        color_settings = pcbnew.GetSettingsManager().GetColorSettings("user")
+        logger.debug(f"  Using 'user' color settings: {color_settings}")
+    except Exception:
+        # Fallback to default color settings (kicad-cli uses PCB Editor settings)
+        color_settings = pcbnew.GetSettingsManager().GetColorSettings()
+        logger.debug(f"  Using default color settings: {color_settings}")
+
+    plot_opts.SetColorSettings(color_settings)
+
+    # Configure plotting options to match kicad-cli behavior
+    plot_opts.SetPlotFrameRef(False)  # No drawing sheet
+    plot_opts.SetUseAuxOrigin(False)  # Use PCB boundary for coordinate system
+    plot_opts.SetPlotValue(True)  # Plot component values
+    plot_opts.SetPlotReference(True)  # Plot component references
+    plot_opts.SetMirror(False)  # No mirroring
+    # Configure drill marks based on skip_through_holes parameter
+    if skip_through_holes:
+        plot_opts.SetDrillMarksType(pcbnew.DRILL_MARKS_NO_DRILL_SHAPE)
+    else:
+        plot_opts.SetDrillMarksType(pcbnew.DRILL_MARKS_FULL_DRILL_SHAPE)
+
+    # Set line width for plotting
+    plot_opts.SetWidthAdjust(0)  # No line width adjustment
+
+    # Set SVG precision and units
+    plot_opts.SetSvgPrecision(4)
+    plot_opts.SetSvgFitPageToBoard(True)  # Fit to board boundary
+
+    # Configure hole filtering
+    plot_opts.SetSkipPlotNPTH_Pads(False)  # We handle this in our filtering
+    plot_opts.SetSketchPadsOnFabLayers(False)  # Standard pad plotting
+
+    try:
+        generated_svgs = []
+
+        # Plot each layer separately
+        for layer_name, layer_id in plot_plan:
+            # Generate clean filename for this layer
+            layer_filename = f"{layer_name.replace('.', '_')}_layer"
+
+            # Open plot file for this layer
+            if not plot_controller.OpenPlotfile(
+                layer_filename, pcbnew.PLOT_FORMAT_SVG, ""
+            ):
+                msg = f"Failed to open plot file for layer {layer_name}"
+                raise RuntimeError(msg)
+
+            # Enable color mode and plot
+            plot_controller.SetColorMode(True)
+            logger.debug(
+                f"  Color mode enabled for layer {layer_name} (ID: {layer_id})"
             )
-            if is_through_hole:
-                pads_to_remove.append(pad)
-                pads_removed += 1
 
-        # Remove through hole pads
-        for pad in pads_to_remove:
-            footprint.RemoveNative(pad)
+            # Use PlotLayers for single layer because plotting drill marks
+            # option is ignored if PlotLayer used
+            sequence = pcbnew.LSEQ()
+            sequence.append(layer_id)
+            plot_controller.PlotLayers(sequence)
+            logger.debug(f"  Layer {layer_name} plotted")
+            plot_controller.ClosePlot()
 
-    logger.debug(f"  Removed {pads_removed} through hole pads")
+            # Find the generated SVG file in output directory
+            # PLOT_CONTROLLER may create files with board name prefix
+            board_name = board.GetFileName()
+            if board_name:
+                board_stem = Path(board_name).stem
+                expected_svg = output_dir / f"{board_stem}-{layer_filename}.svg"
+            else:
+                expected_svg = output_dir / f"{layer_filename}.svg"
 
-    # Save the modified board
-    new_board.Save(str(output_file))
+            if expected_svg.exists():
+                generated_svgs.append(expected_svg)
+                logger.debug(f"  Found generated SVG: {expected_svg.name}")
+            else:
+                # Fallback: look for any SVG files that might have been created
+                svg_pattern = f"*{layer_filename}*.svg"
+                matching_svgs = list(output_dir.glob(svg_pattern))
+                if matching_svgs:
+                    generated_svgs.append(matching_svgs[0])
+                    logger.debug(f"  Found fallback SVG: {matching_svgs[0].name}")
+                else:
+                    logger.warning(f"No SVG file found for layer {layer_name}")
 
+        if not generated_svgs:
+            msg = f"No SVG files were generated for layers: {layers}"
+            raise RuntimeError(msg)
 
-def create_non_copper_pcb(
-    pcb_file: Path,
-    layer_name: str,
-    output_file: Optional[Path] = None,
-) -> Path:
-    """Create a PCB file with through holes filtered out for non-copper layers."""
-    if output_file is None:
-        # Create temporary file
-        fd, temp_path = tempfile.mkstemp(suffix=".kicad_pcb")
-        os.close(fd)
-        output_file = Path(temp_path)
+        logger.debug(
+            f"  Successfully generated {len(generated_svgs)} SVG files in {output_dir}"
+        )
+        return generated_svgs
 
-    create_non_copper_filtered_pcb(pcb_file, layer_name, output_file)
-    return output_file
+    except Exception as e:
+        # Clean up on error
+        try:
+            plot_controller.ClosePlot()
+        except Exception:
+            # Ignore cleanup errors - plot controller may already be closed
+            logger.debug("Plot controller cleanup failed (may already be closed)")
+        msg = f"Failed to generate SVG using PLOT_CONTROLLER: {e}"
+        raise RuntimeError(msg) from e
+
+    finally:
+        # No need to restore working directory since we didn't change it
+        pass

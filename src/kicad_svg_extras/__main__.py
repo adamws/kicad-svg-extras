@@ -222,7 +222,7 @@ def main():
                 logger.error(f"Invalid color '{color_value}' for net '{net_name}': {e}")
                 sys.exit(1)
 
-    net_names = svg_generator.get_net_names(args.pcb_file)
+    net_names = svg_generator.get_net_names(Path(args.pcb_file))
 
     # Resolve colors for nets with user-provided configuration only
     resolved_net_colors = {}
@@ -309,14 +309,14 @@ def main():
     # Generate SVGs for non-copper layers and insert them in proper order
     non_copper_svgs = {}
 
-    for layer_name in non_copper_layers:
-        layer_svg = temp_dir / f"{layer_name.replace('.', '_')}.svg"
-        try:
-            svg_generator.generate_layer_svg(args.pcb_file, layer_name, layer_svg)
-            non_copper_svgs[layer_name] = layer_svg
-            logger.info(f"Generated {layer_name} SVG: {layer_svg.name}")
-        except Exception as e:
-            logger.warning(f"Failed to generate {layer_name} SVG: {e}")
+    # Process all non-copper layers together using comma-separated layer capability
+    if non_copper_layers:
+        layers_str = ",".join(non_copper_layers)
+        generated_svgs = svg_generator.generate_grouped_non_copper_svgs(
+            args.pcb_file, layers_str, temp_dir
+        )
+        non_copper_svgs.update(generated_svgs)
+        logger.info(f"Generated {len(generated_svgs)} non-copper SVGs in one batch")
 
     # Now rebuild the list in proper stackup order
     logger.debug(f"Building final SVG merge order from {len(layer_list)} layers")
