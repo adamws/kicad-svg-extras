@@ -35,6 +35,7 @@ def generate_svg_files(
     skip_through_holes: bool = False,
     keep_pcb: bool = False,
     use_aux_origin: bool = True,
+    bound_with_edges_only: bool = False,
 ) -> list[Path]:
     """Generate individual SVG files for layers
 
@@ -50,6 +51,8 @@ def generate_svg_files(
         skip_through_holes: Skip through hole pads
         keep_pcb: Keep intermediate PCB files for debugging
         use_aux_origin: If True, use aux origin for consistent coordinate system
+        bound_with_edges_only: If True, use only board edges for bounding
+                               box calculation
 
     Returns:
         List of generated SVG file paths
@@ -63,6 +66,7 @@ def generate_svg_files(
             output_file=temp_pcb,
             skip_zones=skip_zones,
             use_aux_origin=use_aux_origin,
+            bound_with_edges_only=bound_with_edges_only,
         )
         try:
             # Generate SVGs in isolated temp directory
@@ -88,7 +92,9 @@ def generate_svg_files(
     elif use_aux_origin:
         # Create temporary PCB with aux origin set
         temp_pcb = output_dir / f"temp_{pcb_file.stem}_aux.kicad_pcb"
-        pcbnew_utils.create_pcb_fitting_to_bbox(pcb_file, temp_pcb)
+        pcbnew_utils.create_pcb_fitting_to_bbox(
+            pcb_file, temp_pcb, edges_only=bound_with_edges_only
+        )
         try:
             generated_svgs = pcbnew_utils.generate_svg_from_board(
                 temp_pcb,
@@ -124,8 +130,26 @@ def generate_color_grouped_svgs(
     skip_zones: bool = False,
     use_css_classes: bool = False,
     use_aux_origin: bool = True,
+    bound_with_edges_only: bool = False,
 ) -> dict[str, Path]:
-    """Generate SVGs grouped by color for optimization, or individual SVGs for CSS."""
+    """Generate SVGs grouped by color for optimization, or individual SVGs for CSS.
+
+    Args:
+        pcb_file: Path to PCB file
+        layers: List of copper layer names to process
+        output_dir: Output directory for generated SVG files
+        net_colors: Dictionary mapping net names to colors
+        keep_pcb: Keep intermediate PCB files for debugging
+        skip_zones: Skip zones in output
+        use_css_classes: Generate individual SVGs with CSS classes instead of
+                         hardcoded colors
+        use_aux_origin: If True, use aux origin for consistent coordinate system
+        bound_with_edges_only: If True, use only board edges for bounding
+                               box calculation
+
+    Returns:
+        Dictionary mapping net names to generated SVG file paths
+    """
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Load board and net codes once for efficiency
@@ -155,6 +179,7 @@ def generate_color_grouped_svgs(
             keep_pcb=keep_pcb,
             skip_zones=skip_zones,
             use_aux_origin=use_aux_origin,
+            bound_with_edges_only=bound_with_edges_only,
         )
     else:
         # Color grouping approach - process each layer separately then merge
@@ -167,6 +192,7 @@ def generate_color_grouped_svgs(
             keep_pcb=keep_pcb,
             skip_zones=skip_zones,
             use_aux_origin=use_aux_origin,
+            bound_with_edges_only=bound_with_edges_only,
         )
 
 
@@ -180,8 +206,25 @@ def _generate_individual_net_svgs_per_layer(
     keep_pcb: bool,
     skip_zones: bool,
     use_aux_origin: bool = True,
+    bound_with_edges_only: bool = False,
 ) -> dict[str, Path]:
-    """Generate individual SVG per net with CSS classes, processing each layer."""
+    """Generate individual SVG per net with CSS classes, processing each layer.
+
+    Args:
+        pcb_file: Path to PCB file
+        copper_layers: List of copper layer names to process
+        output_dir: Output directory for generated SVG files
+        active_nets: List of net names that have elements on the specified layers
+        net_colors: Dictionary mapping net names to colors
+        keep_pcb: Keep intermediate PCB files for debugging
+        skip_zones: Skip zones in output
+        use_aux_origin: If True, use aux origin for consistent coordinate system
+        bound_with_edges_only: If True, use only board edges for bounding
+                               box calculation
+
+    Returns:
+        Dictionary mapping net names to generated SVG file paths
+    """
     # Generate individual net SVGs for each layer separately
     layer_svgs: list[Path] = []
     for layer_name in copper_layers:
@@ -194,6 +237,7 @@ def _generate_individual_net_svgs_per_layer(
             keep_pcb=keep_pcb,
             skip_zones=skip_zones,
             use_aux_origin=use_aux_origin,
+            bound_with_edges_only=bound_with_edges_only,
         )
         # Collect SVGs for this layer
         layer_svgs.extend(layer_net_svgs.values())
@@ -217,8 +261,25 @@ def _generate_individual_net_svgs_single_layer(
     keep_pcb: bool,
     skip_zones: bool,
     use_aux_origin: bool = True,
+    bound_with_edges_only: bool = False,
 ) -> dict[str, Path]:
-    """Generate individual SVG per net with CSS classes for a single layer."""
+    """Generate individual SVG per net with CSS classes for a single layer.
+
+    Args:
+        pcb_file: Path to PCB file
+        layer_name: Layer name to process
+        output_dir: Output directory for generated SVG files
+        active_nets: List of net names that have elements on the specified layer
+        net_colors: Dictionary mapping net names to colors
+        keep_pcb: Keep intermediate PCB files for debugging
+        skip_zones: Skip zones in output
+        use_aux_origin: If True, use aux origin for consistent coordinate system
+        bound_with_edges_only: If True, use only board edges for bounding
+                               box calculation
+
+    Returns:
+        Dictionary mapping net names to generated SVG file paths
+    """
     net_svgs = {}
 
     for net_name in active_nets:
@@ -249,6 +310,7 @@ def _generate_individual_net_svgs_single_layer(
                 skip_zones=skip_zones,
                 keep_pcb=keep_pcb,
                 use_aux_origin=use_aux_origin,
+                bound_with_edges_only=bound_with_edges_only,
             )
             # Single layer generates exactly one SVG file
             if generated_svgs:
@@ -289,8 +351,25 @@ def _generate_grouped_net_svgs_per_layer(
     keep_pcb: bool,
     skip_zones: bool,
     use_aux_origin: bool = True,
+    bound_with_edges_only: bool = False,
 ) -> dict[str, Path]:
-    """Generate SVGs grouped by color, processing each layer separately then merging."""
+    """Generate SVGs grouped by color, processing each layer separately then merging.
+
+    Args:
+        pcb_file: Path to PCB file
+        copper_layers: List of copper layer names to process
+        output_dir: Output directory for generated SVG files
+        active_nets: List of net names that have elements on the specified layers
+        net_colors: Dictionary mapping net names to colors
+        keep_pcb: Keep intermediate PCB files for debugging
+        skip_zones: Skip zones in output
+        use_aux_origin: If True, use aux origin for consistent coordinate system
+        bound_with_edges_only: If True, use only board edges for bounding
+                               box calculation
+
+    Returns:
+        Dictionary mapping net names to generated SVG file paths
+    """
     # Process layers in user-specified order
     all_layer_svgs = []
     for i, layer_name in enumerate(copper_layers):
@@ -306,6 +385,7 @@ def _generate_grouped_net_svgs_per_layer(
             skip_zones=skip_zones,
             skip_through_holes=not is_last_layer,
             use_aux_origin=use_aux_origin,
+            bound_with_edges_only=bound_with_edges_only,
         )
         # Collect unique SVGs for this layer (in order)
         unique_layer_svgs = list(set(layer_net_svgs.values()))
@@ -337,8 +417,26 @@ def _generate_grouped_net_svgs_single_layer(
     skip_zones: bool,
     skip_through_holes: bool = False,
     use_aux_origin: bool = True,
+    bound_with_edges_only: bool = False,
 ) -> dict[str, Path]:
-    """Generate SVGs grouped by color for a single layer (original approach)."""
+    """Generate SVGs grouped by color for a single layer (original approach).
+
+    Args:
+        pcb_file: Path to PCB file
+        layer_name: Layer name to process
+        output_dir: Output directory for generated SVG files
+        active_nets: List of net names that have elements on the specified layer
+        net_colors: Dictionary mapping net names to colors
+        keep_pcb: Keep intermediate PCB files for debugging
+        skip_zones: Skip zones in output
+        skip_through_holes: Skip through hole pads
+        use_aux_origin: If True, use aux origin for consistent coordinate system
+        bound_with_edges_only: If True, use only board edges for bounding
+                               box calculation
+
+    Returns:
+        Dictionary mapping net names to generated SVG file paths
+    """
     # Group nets by their final colors
     color_groups: dict[str, list[str]] = {}
     default_nets = []
@@ -375,6 +473,7 @@ def _generate_grouped_net_svgs_single_layer(
                 skip_through_holes=skip_through_holes,
                 keep_pcb=keep_pcb,
                 use_aux_origin=use_aux_origin,
+                bound_with_edges_only=bound_with_edges_only,
             )
             # Single layer generates exactly one SVG file
             if generated_svgs:
@@ -411,6 +510,7 @@ def _generate_grouped_net_svgs_single_layer(
                 skip_through_holes=skip_through_holes,
                 keep_pcb=keep_pcb,
                 use_aux_origin=use_aux_origin,
+                bound_with_edges_only=bound_with_edges_only,
             )
             # Single layer generates exactly one SVG file
             if generated_svgs:
@@ -440,6 +540,7 @@ def generate_grouped_non_copper_svgs(
     output_dir: Path,
     *,
     use_aux_origin: bool = True,
+    bound_with_edges_only: bool = False,
 ) -> dict[str, Path]:
     """Generate SVGs for multiple non-copper layers in a single batch operation.
 
@@ -448,6 +549,8 @@ def generate_grouped_non_copper_svgs(
         layers: Comma-separated layer names
         output_dir: Directory where SVGs will be generated
         use_aux_origin: If True, use aux origin for consistent coordinate system
+        bound_with_edges_only: If True, use only board edges for bounding
+                               box calculation
 
     Returns:
         Dict mapping layer name to generated SVG path
@@ -457,7 +560,9 @@ def generate_grouped_non_copper_svgs(
     # For non-copper layers, we need to create a temp PCB with aux origin if needed
     if use_aux_origin:
         temp_pcb = output_dir / f"temp_non_copper_{uuid.uuid4().hex[:8]}.kicad_pcb"
-        pcbnew_utils.create_pcb_fitting_to_bbox(pcb_file, temp_pcb)
+        pcbnew_utils.create_pcb_fitting_to_bbox(
+            pcb_file, temp_pcb, edges_only=bound_with_edges_only
+        )
         try:
             # All non-copper layers skip drill marks
             generated_svgs = pcbnew_utils.generate_svg_from_board(

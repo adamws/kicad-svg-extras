@@ -128,11 +128,14 @@ def main():
         help="Set the logging level (default: INFO)",
     )
     parser.add_argument(
-        "--no-fit-to-content",
-        action="store_true",
+        "--fit-to-content",
+        choices=["none", "all", "edges_only"],
+        default="edges_only",
         help=(
-            "Disable automatic fitting of SVG to content bounds "
-            "(keeps original large canvas)"
+            "Control how bounding box is calculated for fit-to-content: "
+            "'none' disables fitting (keeps original canvas), "
+            "'all' uses all PCB components, "
+            "'edges_only' uses only board edges (default)"
         ),
     )
 
@@ -275,6 +278,7 @@ def main():
     logger.info(f"Processing layers: {', '.join(layer_list)}")
 
     # Generate colored SVGs for copper layers (nets)
+    edges_only = args.fit_to_content == "edges_only"
     net_svgs = svg_generator.generate_color_grouped_svgs(
         args.pcb_file,
         copper_layers,
@@ -283,7 +287,8 @@ def main():
         keep_pcb=args.keep_intermediates,
         skip_zones=args.skip_zones,
         use_css_classes=args.use_css_classes,
-        use_aux_origin=not args.no_fit_to_content,
+        use_aux_origin=args.fit_to_content != "none",
+        bound_with_edges_only=edges_only,
     )
 
     unique_svgs = len(set(net_svgs.values()))
@@ -317,7 +322,8 @@ def main():
             args.pcb_file,
             layers_str,
             temp_dir,
-            use_aux_origin=not args.no_fit_to_content,
+            use_aux_origin=args.fit_to_content != "none",
+            bound_with_edges_only=edges_only,
         )
         non_copper_svgs.update(generated_svgs)
         logger.info(f"Generated {len(generated_svgs)} non-copper SVGs in one batch")
@@ -357,9 +363,10 @@ def main():
     try:
         # Check if we need to force dimensions due to KiCad size limits
         forced_width = forced_height = forced_viewbox = None
-        if not args.no_fit_to_content:
+        if args.fit_to_content != "none":
+            edges_only = args.fit_to_content == "edges_only"
             needs_forcing, forced_width, forced_height, forced_viewbox = (
-                get_pcb_forced_svg_params(args.pcb_file)
+                get_pcb_forced_svg_params(args.pcb_file, edges_only=edges_only)
             )
             if needs_forcing:
                 logger.debug(

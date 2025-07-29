@@ -15,7 +15,7 @@ import logging
 import re
 import shutil
 from pathlib import Path
-from typing import Optional
+from typing import Optional, cast
 
 from kicad_svg_extras.layers import LAYER_DEFINITIONS
 
@@ -45,7 +45,7 @@ def load_board(pcb_file: Path):
     return board
 
 
-def get_board_bounding_box(pcb_file: Path) -> pcbnew.BOX2I:
+def get_board_bounding_box(pcb_file: Path, *, edges_only: bool = False) -> pcbnew.BOX2I:
     """Get the bounding box from the original PCB file.
 
     This is used to set consistent aux origin across all intermediate PCB files
@@ -53,22 +53,29 @@ def get_board_bounding_box(pcb_file: Path) -> pcbnew.BOX2I:
 
     Args:
         pcb_file: Path to the original PCB file
+        edges_only: If True, use only board edges for bounding box calculation
 
     Returns:
         pcbnew.BOX2I: Bounding box
     """
     board = load_board(pcb_file)
-    bbox = board.ComputeBoundingBox(False)  # True = use board edges only
+    bbox = board.ComputeBoundingBox(edges_only)
     # creating copy because original gets freed when board scope ends
     bbox_copy = pcbnew.BOX2I()
     bbox_copy.SetOrigin(bbox.GetOrigin())
     bbox_copy.SetWidth(bbox.GetWidth())
     bbox_copy.SetHeight(bbox.GetHeight())
-    logger.debug(f"Computed bounding box from {pcb_file.name}: {bbox_copy.Format()}")
+    bbox_type = "edges only" if edges_only else "all components"
+    logger.debug(
+        f"Computed bounding box ({bbox_type}) from {pcb_file.name}: "
+        f"{bbox_copy.Format()}"
+    )
     return bbox_copy
 
 
-def is_pcb_smaller_than_kicad_limit(pcb_file: Path) -> tuple[bool, float, float]:
+def is_pcb_smaller_than_kicad_limit(
+    pcb_file: Path, *, edges_only: bool = False
+) -> tuple[bool, float, float]:
     """Check if PCB dimensions are smaller than KiCad's minimum page size limit.
 
     KiCad refuses to respect page sizes smaller than 25.4x25.4mm, so we need
@@ -76,13 +83,14 @@ def is_pcb_smaller_than_kicad_limit(pcb_file: Path) -> tuple[bool, float, float]
 
     Args:
         pcb_file: Path to the PCB file
+        edges_only: If True, use only board edges for bounding box calculation
 
     Returns:
         tuple: (is_smaller, width_mm, height_mm)
     """
-    bbox = get_board_bounding_box(pcb_file)
-    width_mm = pcbnew.ToMM(bbox.GetWidth())
-    height_mm = pcbnew.ToMM(bbox.GetHeight())
+    bbox = get_board_bounding_box(pcb_file, edges_only=edges_only)
+    width_mm = cast(float, pcbnew.ToMM(bbox.GetWidth()))
+    height_mm = cast(float, pcbnew.ToMM(bbox.GetHeight()))
 
     # KiCad minimum page size is 25.4mm x 25.4mm (1 inch x 1 inch)
     kicad_min_size_mm = 25.4
@@ -99,18 +107,21 @@ def is_pcb_smaller_than_kicad_limit(pcb_file: Path) -> tuple[bool, float, float]
 
 def get_pcb_forced_svg_params(
     pcb_file: Path,
+    *,
+    edges_only: bool = False,
 ) -> tuple[bool, Optional[str], Optional[str], Optional[str]]:
     """Get forced SVG parameters when PCB is smaller than KiCad's page size limit.
 
     Args:
         pcb_file: Path to the PCB file
+        edges_only: If True, use only board edges for bounding box calculation
 
     Returns:
         tuple: (needs_forcing, forced_width, forced_height, forced_viewbox)
     """
-    bbox = get_board_bounding_box(pcb_file)
-    width_mm = pcbnew.ToMM(bbox.GetWidth())
-    height_mm = pcbnew.ToMM(bbox.GetHeight())
+    bbox = get_board_bounding_box(pcb_file, edges_only=edges_only)
+    width_mm = cast(float, pcbnew.ToMM(bbox.GetWidth()))
+    height_mm = cast(float, pcbnew.ToMM(bbox.GetHeight()))
 
     # KiCad minimum page size is 25.4mm x 25.4mm (1 inch x 1 inch)
     kicad_min_size_mm = 25.4
@@ -170,7 +181,9 @@ def set_pcb_aux_origin_and_page_size(
     pcb_file.write_text(content)
 
 
-def create_pcb_fitting_to_bbox(pcb_file: Path, output_file: Path) -> None:
+def create_pcb_fitting_to_bbox(
+    pcb_file: Path, output_file: Path, *, edges_only: bool = False
+) -> None:
     """Create a copy of PCB file with aux origin and page size set to match bbox."""
     logger.debug(
         f"Creating PCB copy with aux origin: {pcb_file.name} -> {output_file.name}"
@@ -179,7 +192,7 @@ def create_pcb_fitting_to_bbox(pcb_file: Path, output_file: Path) -> None:
     # Create a copy of the board by copying the original file first
     shutil.copy2(pcb_file, output_file)
 
-    bbox = get_board_bounding_box(pcb_file)
+    bbox = get_board_bounding_box(pcb_file, edges_only=edges_only)
 
     # Set aux origin using API and page size using file modification
     set_pcb_aux_origin_and_page_size(
@@ -277,7 +290,8 @@ def create_filtered_pcb(
     output_file: Path,
     *,
     skip_zones: bool = False,
-    use_aux_origin=None,
+    use_aux_origin: Optional[bool] = None,
+    bound_with_edges_only: bool = False,
 ) -> None:
     """Create a new PCB file with only the specified nets.
 
@@ -286,7 +300,8 @@ def create_filtered_pcb(
         net_names: Set of net names to keep
         output_file: Output PCB file path
         skip_zones: If True, remove zones from the output
-        aux_origin: Optional aux origin point to set in the filtered PCB
+        use_aux_origin: If True, set aux origin in the filtered PCB
+        edges_only: If True, use only board edges for bounding box calculation
     """
     logger.debug(f"Creating filtered PCB for nets: {sorted(net_names)}")
     logger.debug(f"  Source: {pcb_file.name}")
@@ -397,7 +412,7 @@ def create_filtered_pcb(
     new_board.Save(str(output_file))
 
     if use_aux_origin:
-        bbox = get_board_bounding_box(pcb_file)
+        bbox = get_board_bounding_box(pcb_file, edges_only=bound_with_edges_only)
         set_pcb_aux_origin_and_page_size(
             output_file, bbox.GetOrigin(), bbox.GetWidth(), bbox.GetHeight()
         )

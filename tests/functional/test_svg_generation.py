@@ -13,8 +13,17 @@ import pytest
 class TestSVGGeneration:
     """Test SVG generation functionality with real PCB files."""
 
+    @pytest.mark.parametrize(
+        "fit_to_content",
+        ["none", "all", "edges_only"],
+    )
     def test_basic_svg_generation(
-        self, cli_runner, temp_output_dir, pcb_files_dir, capture_outputs
+        self,
+        cli_runner,
+        temp_output_dir,
+        pcb_files_dir,
+        capture_outputs,
+        fit_to_content,
     ):
         """Test basic SVG generation without any special options."""
         # This test will be skipped until PCB files are provided
@@ -33,6 +42,8 @@ class TestSVGGeneration:
             [
                 "--layers",
                 "F.Cu,B.Cu",
+                "--fit-to-content",
+                fit_to_content,
                 str(pcb_file),
                 str(output_dir),
             ]
@@ -211,7 +222,8 @@ class TestLayerOrderComparison:
         result = cli_runner(
             [
                 "--no-background",
-                "--no-fit-to-content",
+                "--fit-to-content",
+                "none",
                 "--layers",
                 layers_str,
                 str(pcb_file),
