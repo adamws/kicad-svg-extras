@@ -59,6 +59,31 @@ demo-simple2layer-css:
     --keep-intermediates {{ kicad_demo }} output_test_css
   just preview-svg output_test_css/colored*.svg
 
+
+svg-mm-to-cm svg_file:
+  sed -i -E 's/(width|height)="([0-9]*\.[0-9]*)mm"/\1="\2cm"/g' {{svg_file}}
+
+svg-fix-area svg_file:
+  inkscape --export-type="svg" --export-area-drawing -o {{svg_file}} {{svg_file}}
+
+demo-kicad-cli-comparison:
+  #!/usr/bin/env bash
+  set {{ bash_flags }}
+  . .env/bin/activate
+  rm -rf output_test_css
+  kicad-svg-extras --layers "F.Cu,B.Cu,Edge.Cuts" \
+    --no-background \
+    {{ kicad_demo }} output_test_tmp
+  mv output_test_tmp/colored_F_Cu_B_Cu_Edge_Cuts.svg resources/kicad-svg-extras.svg
+
+  {{ kicad-cli }} pcb export svg --layers "F.Cu,B.Cu,Edge.Cuts" \
+    --exclude-drawing-sheet --fit-page-to-board \
+    --output resources/kicad-cli.svg {{ kicad_demo }}
+
+  just svg-mm-to-cm resources/kicad-svg-extras.svg
+  just svg-mm-to-cm resources/kicad-cli.svg
+  just svg-fix-area resources/kicad-cli.svg
+
 test-unit:
   hatch run test-unit
 
