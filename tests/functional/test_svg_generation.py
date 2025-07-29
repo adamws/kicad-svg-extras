@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 """Functional tests for SVG generation from KiCad PCB files."""
 import subprocess
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
@@ -172,6 +173,21 @@ class TestSVGGeneration:
 class TestLayerOrderComparison:
     """Test layer merging order against KiCad CLI output."""
 
+    def remove_empty_groups(self, svg_file: Path) -> None:
+        tree = ET.parse(svg_file)
+        root = tree.getroot()
+        name = "{http://www.w3.org/2000/svg}g"
+
+        def _remove_empty_groups(root) -> None:
+            for elem in root.findall(name):
+                if len(elem) == 0:
+                    root.remove(elem)
+            for child in root:
+                _remove_empty_groups(child)
+
+        _remove_empty_groups(root)
+        tree.write(svg_file, encoding="unicode")
+
     def test_layer_order_matches_kicad_cli(
         self, cli_runner, temp_output_dir, pcb_files_dir, capture_outputs
     ):
@@ -191,7 +207,6 @@ class TestLayerOrderComparison:
         layers_str = ",".join(layers)
 
         # Generate reference SVG using kicad-cli
-
         kicad_reference = output_dir / "kicad_reference.svg"
 
         try:
@@ -217,6 +232,10 @@ class TestLayerOrderComparison:
             pytest.skip(f"kicad-cli not available or failed: {e}")
         except FileNotFoundError:
             pytest.skip("kicad-cli not found in PATH")
+
+        # kicad-cli creates a lot of empty groups. Remove them to make
+        # comparison with our results easier (we remove empty groups by default).
+        self.remove_empty_groups(kicad_reference)
 
         # Generate our tool's SVG output (without custom colors to match kicad-cli)
         result = cli_runner(

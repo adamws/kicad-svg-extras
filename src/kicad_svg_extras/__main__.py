@@ -31,6 +31,7 @@ from kicad_svg_extras.pcbnew_utils import (
 from kicad_svg_extras.svg_processor import (
     add_background_to_svg,
     merge_svg_files,
+    remove_empty_groups,
 )
 
 logger = logging.getLogger(__name__)
@@ -384,6 +385,10 @@ def main():
         if not args.no_background:
             add_background_to_svg(output_file, args.background_color)
         logger.info(f"Created colored SVG: {output_file}")
+
+        logger.debug("Running result sanitization")
+        logger.debug("  Remove empty groups")
+        remove_empty_groups(output_file)
 
     except Exception as e:
         logger.error(f"Error creating colored SVG: {e}")

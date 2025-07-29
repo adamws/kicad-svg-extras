@@ -272,3 +272,22 @@ def add_background_to_svg(svg_file: Path, background_color: str) -> None:
         parent.insert(desc_index + 1, rect)
 
         tree.write(svg_file, encoding="unicode")
+
+
+def remove_empty_groups(svg_file: Path) -> None:
+    """Remove empty groups
+
+    KiCad's plotter creates a lot of empty groups which are not needed
+    """
+    tree = ET.parse(svg_file)
+    root = tree.getroot()
+
+    def _remove_empty_groups(root) -> None:
+        for elem in root.findall(f".//{{{SVG_NS}}}g"):
+            if len(elem) == 0:
+                root.remove(elem)
+        for child in root:
+            _remove_empty_groups(child)
+
+    _remove_empty_groups(root)
+    tree.write(svg_file, encoding="unicode")
