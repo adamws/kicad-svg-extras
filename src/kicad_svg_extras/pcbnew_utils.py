@@ -301,7 +301,8 @@ def create_filtered_pcb(
         output_file: Output PCB file path
         skip_zones: If True, remove zones from the output
         use_aux_origin: If True, set aux origin in the filtered PCB
-        edges_only: If True, use only board edges for bounding box calculation
+        bound_with_edges_only: If True, use only board edges for bounding
+                               box calculation
     """
     logger.debug(f"Creating filtered PCB for nets: {sorted(net_names)}")
     logger.debug(f"  Source: {pcb_file.name}")

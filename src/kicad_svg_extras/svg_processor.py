@@ -275,9 +275,10 @@ def add_background_to_svg(svg_file: Path, background_color: str) -> None:
 
 
 def remove_empty_groups(svg_file: Path) -> None:
-    """Remove empty groups
+    """Remove empty groups from an SVG file.
 
-    KiCad's plotter creates a lot of empty groups which are not needed
+    KiCad's plotter creates many empty groups that are not needed and can be
+    safely removed to clean up the output.
     """
     tree = ET.parse(svg_file)
     root = tree.getroot()
