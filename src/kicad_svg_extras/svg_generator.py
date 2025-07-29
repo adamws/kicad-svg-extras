@@ -5,6 +5,7 @@
 
 import logging
 import shutil
+import uuid
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Optional
@@ -16,7 +17,6 @@ from kicad_svg_extras.colors import (
     find_copper_color_in_svg,
 )
 from kicad_svg_extras.layers import get_copper_layers
-from kicad_svg_extras.svg_processor import merge_svg_files
 
 logger = logging.getLogger(__name__)
 
@@ -25,59 +25,55 @@ SVG_NS = "http://www.w3.org/2000/svg"
 ET.register_namespace("", SVG_NS)
 
 
-def generate_svg(
+def generate_svg_files(
     pcb_file: Path,
     layers: str,
-    output_file: Path,
+    output_dir: Path,
     *,
     net_names: Optional[set[str]] = None,
     skip_zones: bool = False,
     skip_through_holes: bool = False,
     keep_pcb: bool = False,
-) -> None:
-    """Generate SVG
+    use_aux_origin: bool = True,
+) -> list[Path]:
+    """Generate individual SVG files for layers
 
     This function uses the pcbnew PLOT_CONTROLLER API directly to avoid
-    subprocess overhead
+    subprocess overhead. Returns individual SVG files rather than merging them.
 
     Args:
         pcb_file: Path to PCB file
         layers: Comma-separated layer names
-        output_file: Output SVG file path
+        output_dir: Output directory for SVG files
         net_names: Optional set of net names to filter (None = all nets)
         skip_zones: Skip zones in output
         skip_through_holes: Skip through hole pads
         keep_pcb: Keep intermediate PCB files for debugging
+        use_aux_origin: If True, use aux origin for consistent coordinate system
+
+    Returns:
+        List of generated SVG file paths
     """
     if net_names is not None:
         # Create temporary filtered PCB file for PLOT_CONTROLLER
-        temp_pcb = output_file.parent / f"temp_{output_file.stem}.kicad_pcb"
+        temp_pcb = output_dir / f"temp_{pcb_file.stem}_filtered.kicad_pcb"
         pcbnew_utils.create_filtered_pcb(
             pcb_file,
             net_names,
             output_file=temp_pcb,
             skip_zones=skip_zones,
+            use_aux_origin=use_aux_origin,
         )
         try:
             # Generate SVGs in isolated temp directory
             generated_svgs = pcbnew_utils.generate_svg_from_board(
                 temp_pcb,
                 layers,
-                output_file.parent,
+                output_dir,
                 skip_through_holes=skip_through_holes,
+                use_aux_origin=use_aux_origin,
             )
-
-            # Handle file naming - merge multiple layers or rename single layer
-            if len(generated_svgs) == 1:
-                # Single layer - rename to target output file
-                generated_svgs[0].rename(output_file)
-            else:
-                # Multiple layers - merge them
-                merge_svg_files(generated_svgs, output_file)
-                # Clean up temporary files
-                for temp_file in generated_svgs:
-                    if temp_file.exists():
-                        temp_file.unlink()
+            return generated_svgs
         finally:
             # Clean up temporary files (PCB and associated project files)
             if not keep_pcb:
@@ -88,23 +84,34 @@ def generate_svg(
                     project_file = temp_pcb.with_suffix(ext)
                     if project_file.exists():
                         project_file.unlink()
+    # No filtering needed, but may need to set aux origin
+    elif use_aux_origin:
+        # Create temporary PCB with aux origin set
+        temp_pcb = output_dir / f"temp_{pcb_file.stem}_aux.kicad_pcb"
+        pcbnew_utils.create_pcb_fitting_to_bbox(pcb_file, temp_pcb)
+        try:
+            generated_svgs = pcbnew_utils.generate_svg_from_board(
+                temp_pcb,
+                layers,
+                output_dir,
+                skip_through_holes=skip_through_holes,
+                use_aux_origin=use_aux_origin,
+            )
+            return generated_svgs
+        finally:
+            # Clean up temporary PCB file
+            if not keep_pcb and temp_pcb.exists():
+                temp_pcb.unlink()
     else:
-        # No filtering needed, use original PCB file directly
+        # Use original PCB file directly
         generated_svgs = pcbnew_utils.generate_svg_from_board(
-            pcb_file, layers, output_file.parent, skip_through_holes=skip_through_holes
+            pcb_file,
+            layers,
+            output_dir,
+            skip_through_holes=skip_through_holes,
+            use_aux_origin=use_aux_origin,
         )
-
-        # Handle file naming - merge multiple layers or rename single layer
-        if len(generated_svgs) == 1:
-            # Single layer - rename to target output file
-            generated_svgs[0].rename(output_file)
-        else:
-            # Multiple layers - merge them
-            merge_svg_files(generated_svgs, output_file)
-            # Clean up temporary files
-            for temp_file in generated_svgs:
-                if temp_file.exists():
-                    temp_file.unlink()
+        return generated_svgs
 
 
 def generate_color_grouped_svgs(
@@ -116,6 +123,7 @@ def generate_color_grouped_svgs(
     keep_pcb: bool = False,
     skip_zones: bool = False,
     use_css_classes: bool = False,
+    use_aux_origin: bool = True,
 ) -> dict[str, Path]:
     """Generate SVGs grouped by color for optimization, or individual SVGs for CSS."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -146,6 +154,7 @@ def generate_color_grouped_svgs(
             net_colors,
             keep_pcb=keep_pcb,
             skip_zones=skip_zones,
+            use_aux_origin=use_aux_origin,
         )
     else:
         # Color grouping approach - process each layer separately then merge
@@ -157,6 +166,7 @@ def generate_color_grouped_svgs(
             net_colors,
             keep_pcb=keep_pcb,
             skip_zones=skip_zones,
+            use_aux_origin=use_aux_origin,
         )
 
 
@@ -169,6 +179,7 @@ def _generate_individual_net_svgs_per_layer(
     *,
     keep_pcb: bool,
     skip_zones: bool,
+    use_aux_origin: bool = True,
 ) -> dict[str, Path]:
     """Generate individual SVG per net with CSS classes, processing each layer."""
     # Generate individual net SVGs for each layer separately
@@ -182,6 +193,7 @@ def _generate_individual_net_svgs_per_layer(
             net_colors,
             keep_pcb=keep_pcb,
             skip_zones=skip_zones,
+            use_aux_origin=use_aux_origin,
         )
         # Collect SVGs for this layer
         layer_svgs.extend(layer_net_svgs.values())
@@ -204,6 +216,7 @@ def _generate_individual_net_svgs_single_layer(
     *,
     keep_pcb: bool,
     skip_zones: bool,
+    use_aux_origin: bool = True,
 ) -> dict[str, Path]:
     """Generate individual SVG per net with CSS classes for a single layer."""
     net_svgs = {}
@@ -228,14 +241,18 @@ def _generate_individual_net_svgs_single_layer(
 
         # Generate SVG for this net only on this layer using optimized approach
         try:
-            generate_svg(
+            generated_svgs = generate_svg_files(
                 pcb_file,
                 layer_name,
-                raw_svg,
+                output_dir,
                 net_names={net_name},
                 skip_zones=skip_zones,
                 keep_pcb=keep_pcb,
+                use_aux_origin=use_aux_origin,
             )
+            # Single layer generates exactly one SVG file
+            if generated_svgs:
+                generated_svgs[0].rename(raw_svg)
 
             # Apply CSS class styling
             if net_color:
@@ -271,6 +288,7 @@ def _generate_grouped_net_svgs_per_layer(
     *,
     keep_pcb: bool,
     skip_zones: bool,
+    use_aux_origin: bool = True,
 ) -> dict[str, Path]:
     """Generate SVGs grouped by color, processing each layer separately then merging."""
     # Process layers in user-specified order
@@ -287,6 +305,7 @@ def _generate_grouped_net_svgs_per_layer(
             keep_pcb=keep_pcb,
             skip_zones=skip_zones,
             skip_through_holes=not is_last_layer,
+            use_aux_origin=use_aux_origin,
         )
         # Collect unique SVGs for this layer (in order)
         unique_layer_svgs = list(set(layer_net_svgs.values()))
@@ -317,6 +336,7 @@ def _generate_grouped_net_svgs_single_layer(
     keep_pcb: bool,
     skip_zones: bool,
     skip_through_holes: bool = False,
+    use_aux_origin: bool = True,
 ) -> dict[str, Path]:
     """Generate SVGs grouped by color for a single layer (original approach)."""
     # Group nets by their final colors
@@ -346,15 +366,19 @@ def _generate_grouped_net_svgs_single_layer(
 
         try:
             # Use optimized approach for default nets
-            generate_svg(
+            generated_svgs = generate_svg_files(
                 pcb_file,
                 layer_name,
-                default_svg,
+                output_dir,
                 net_names=set(default_nets),
                 skip_zones=skip_zones,
                 skip_through_holes=skip_through_holes,
                 keep_pcb=keep_pcb,
+                use_aux_origin=use_aux_origin,
             )
+            # Single layer generates exactly one SVG file
+            if generated_svgs:
+                generated_svgs[0].rename(default_svg)
 
             # Map all default nets to the same SVG file
             for net_name in default_nets:
@@ -378,15 +402,19 @@ def _generate_grouped_net_svgs_single_layer(
 
         try:
             # Use optimized approach for color group
-            generate_svg(
+            generated_svgs = generate_svg_files(
                 pcb_file,
                 layer_name,
-                raw_svg,
+                output_dir,
                 net_names=set(nets_with_color),
                 skip_zones=skip_zones,
                 skip_through_holes=skip_through_holes,
                 keep_pcb=keep_pcb,
+                use_aux_origin=use_aux_origin,
             )
+            # Single layer generates exactly one SVG file
+            if generated_svgs:
+                generated_svgs[0].rename(raw_svg)
 
             # Apply color to the intermediate SVG immediately
             apply_color_to_svg(raw_svg, color, color_svg)
@@ -410,6 +438,8 @@ def generate_grouped_non_copper_svgs(
     pcb_file: Path,
     layers: str,
     output_dir: Path,
+    *,
+    use_aux_origin: bool = True,
 ) -> dict[str, Path]:
     """Generate SVGs for multiple non-copper layers in a single batch operation.
 
@@ -417,14 +447,39 @@ def generate_grouped_non_copper_svgs(
         pcb_file: Path to the PCB file
         layers: Comma-separated layer names
         output_dir: Directory where SVGs will be generated
+        use_aux_origin: If True, use aux origin for consistent coordinate system
 
     Returns:
         Dict mapping layer name to generated SVG path
     """
-    # All non-copper layers skip drill marks
-    generated_svgs = pcbnew_utils.generate_svg_from_board(
-        pcb_file, layers, output_dir, skip_through_holes=True
-    )
+    # Get aux origin if using aux origin mode
+
+    # For non-copper layers, we need to create a temp PCB with aux origin if needed
+    if use_aux_origin:
+        temp_pcb = output_dir / f"temp_non_copper_{uuid.uuid4().hex[:8]}.kicad_pcb"
+        pcbnew_utils.create_pcb_fitting_to_bbox(pcb_file, temp_pcb)
+        try:
+            # All non-copper layers skip drill marks
+            generated_svgs = pcbnew_utils.generate_svg_from_board(
+                temp_pcb,
+                layers,
+                output_dir,
+                skip_through_holes=True,
+                use_aux_origin=use_aux_origin,
+            )
+        finally:
+            # Clean up temp PCB
+            if temp_pcb.exists():
+                temp_pcb.unlink()
+    else:
+        # All non-copper layers skip drill marks
+        generated_svgs = pcbnew_utils.generate_svg_from_board(
+            pcb_file,
+            layers,
+            output_dir,
+            skip_through_holes=True,
+            use_aux_origin=use_aux_origin,
+        )
 
     # Parse layer names to create mapping
     layer_names = [layer.strip() for layer in layers.split(",")]

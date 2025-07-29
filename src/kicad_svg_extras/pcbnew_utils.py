@@ -12,6 +12,7 @@ This module centralizes all pcbnew library interactions including:
 """
 
 import logging
+import re
 import shutil
 from pathlib import Path
 from typing import Optional
@@ -42,6 +43,156 @@ def load_board(pcb_file: Path):
         msg = f"Failed to load board: {pcb_file}"
         raise RuntimeError(msg)
     return board
+
+
+def get_board_bounding_box(pcb_file: Path) -> pcbnew.BOX2I:
+    """Get the bounding box from the original PCB file.
+
+    This is used to set consistent aux origin across all intermediate PCB files
+    for proper coordinate system alignment when using SetUseAuxOrigin(True).
+
+    Args:
+        pcb_file: Path to the original PCB file
+
+    Returns:
+        pcbnew.BOX2I: Bounding box
+    """
+    board = load_board(pcb_file)
+    bbox = board.ComputeBoundingBox(False)  # True = use board edges only
+    # creating copy because original gets freed when board scope ends
+    bbox_copy = pcbnew.BOX2I()
+    bbox_copy.SetOrigin(bbox.GetOrigin())
+    bbox_copy.SetWidth(bbox.GetWidth())
+    bbox_copy.SetHeight(bbox.GetHeight())
+    logger.debug(f"Computed bounding box from {pcb_file.name}: {bbox_copy.Format()}")
+    return bbox_copy
+
+
+def is_pcb_smaller_than_kicad_limit(pcb_file: Path) -> tuple[bool, float, float]:
+    """Check if PCB dimensions are smaller than KiCad's minimum page size limit.
+
+    KiCad refuses to respect page sizes smaller than 25.4x25.4mm, so we need
+    to handle this case by forcing SVG dimensions during merge.
+
+    Args:
+        pcb_file: Path to the PCB file
+
+    Returns:
+        tuple: (is_smaller, width_mm, height_mm)
+    """
+    bbox = get_board_bounding_box(pcb_file)
+    width_mm = pcbnew.ToMM(bbox.GetWidth())
+    height_mm = pcbnew.ToMM(bbox.GetHeight())
+
+    # KiCad minimum page size is 25.4mm x 25.4mm (1 inch x 1 inch)
+    kicad_min_size_mm = 25.4
+    is_smaller = width_mm < kicad_min_size_mm or height_mm < kicad_min_size_mm
+
+    if is_smaller:
+        logger.debug(
+            f"PCB dimensions {width_mm:.1f}x{height_mm:.1f}mm are smaller than "
+            f"KiCad limit {kicad_min_size_mm}mm"
+        )
+
+    return is_smaller, width_mm, height_mm
+
+
+def get_pcb_forced_svg_params(
+    pcb_file: Path,
+) -> tuple[bool, Optional[str], Optional[str], Optional[str]]:
+    """Get forced SVG parameters when PCB is smaller than KiCad's page size limit.
+
+    Args:
+        pcb_file: Path to the PCB file
+
+    Returns:
+        tuple: (needs_forcing, forced_width, forced_height, forced_viewbox)
+    """
+    bbox = get_board_bounding_box(pcb_file)
+    width_mm = pcbnew.ToMM(bbox.GetWidth())
+    height_mm = pcbnew.ToMM(bbox.GetHeight())
+
+    # KiCad minimum page size is 25.4mm x 25.4mm (1 inch x 1 inch)
+    kicad_min_size_mm = 25.4
+    needs_forcing = width_mm < kicad_min_size_mm or height_mm < kicad_min_size_mm
+
+    if not needs_forcing:
+        return False, None, None, None
+
+    # Calculate the viewBox based on the actual bounding box coordinates
+    # When using aux origin, the viewBox should start from (0,0) and span the PCB
+    # dimensions
+    forced_width = f"{width_mm:.3f}mm"
+    forced_height = f"{height_mm:.3f}mm"
+    forced_viewbox = f"0 0 {width_mm:.3f} {height_mm:.3f}"
+
+    logger.debug(
+        f"PCB {width_mm:.1f}x{height_mm:.1f}mm needs forced SVG params: "
+        f"{forced_width}x{forced_height} viewBox={forced_viewbox}"
+    )
+
+    return True, forced_width, forced_height, forced_viewbox
+
+
+def set_pcb_aux_origin_and_page_size(
+    pcb_file: Path, aux_origin, page_width: int, page_height: int
+) -> None:
+    """Set aux origin using API and page size using file modification.
+
+    Args:
+        pcb_file: PCB file path to modify
+        aux_origin: Aux origin point (pcbnew.VECTOR2I)
+        page_width: Page width in nanometers
+        page_height: Page height in nanometers
+    """
+    logger.debug(f"Setting aux origin and page size: {pcb_file.name}")
+    logger.debug(f"  Setting aux origin: {aux_origin}")
+
+    # Load the board and set aux origin using API
+    board = load_board(pcb_file)
+    board.GetDesignSettings().SetAuxOrigin(aux_origin)
+    board.Save(str(pcb_file))
+
+    # Read the PCB file content
+    content = pcb_file.read_text()
+
+    page_width_mm = pcbnew.ToMM(page_width)
+    page_height_mm = pcbnew.ToMM(page_height)
+
+    logger.debug(f"  Setting page size: {page_width_mm}x{page_height_mm}mm")
+
+    # Replace page size - look for (paper .*) pattern
+    page_pattern = r"\(paper .*\)"
+    new_page = f'(paper "User" {page_width_mm} {page_height_mm})'
+    content = re.sub(page_pattern, new_page, content)
+
+    # Write back to file
+    pcb_file.write_text(content)
+
+
+def create_pcb_fitting_to_bbox(pcb_file: Path, output_file: Path) -> None:
+    """Create a copy of PCB file with aux origin and page size set to match bbox."""
+    logger.debug(
+        f"Creating PCB copy with aux origin: {pcb_file.name} -> {output_file.name}"
+    )
+
+    # Create a copy of the board by copying the original file first
+    shutil.copy2(pcb_file, output_file)
+
+    bbox = get_board_bounding_box(pcb_file)
+
+    # Set aux origin using API and page size using file modification
+    set_pcb_aux_origin_and_page_size(
+        output_file, bbox.GetOrigin(), bbox.GetWidth(), bbox.GetHeight()
+    )
+
+    # Clean up unnecessary project files created by KiCad
+    prl_file = output_file.with_suffix(".kicad_prl")
+    pro_file = output_file.with_suffix(".kicad_pro")
+    if prl_file.exists():
+        prl_file.unlink()
+    if pro_file.exists():
+        pro_file.unlink()
 
 
 def get_net_codes(board) -> dict[str, int]:
@@ -126,8 +277,17 @@ def create_filtered_pcb(
     output_file: Path,
     *,
     skip_zones: bool = False,
+    use_aux_origin=None,
 ) -> None:
-    """Create a new PCB file with only the specified nets."""
+    """Create a new PCB file with only the specified nets.
+
+    Args:
+        pcb_file: Source PCB file path
+        net_names: Set of net names to keep
+        output_file: Output PCB file path
+        skip_zones: If True, remove zones from the output
+        aux_origin: Optional aux origin point to set in the filtered PCB
+    """
     logger.debug(f"Creating filtered PCB for nets: {sorted(net_names)}")
     logger.debug(f"  Source: {pcb_file.name}")
     logger.debug(f"  Output: {output_file.name}")
@@ -236,6 +396,12 @@ def create_filtered_pcb(
     # Save the modified board
     new_board.Save(str(output_file))
 
+    if use_aux_origin:
+        bbox = get_board_bounding_box(pcb_file)
+        set_pcb_aux_origin_and_page_size(
+            output_file, bbox.GetOrigin(), bbox.GetWidth(), bbox.GetHeight()
+        )
+
     # Clean up unnecessary project files created by KiCad
     prl_file = output_file.with_suffix(".kicad_prl")
     pro_file = output_file.with_suffix(".kicad_pro")
@@ -329,6 +495,7 @@ def generate_svg_from_board(
     output_dir: Path,
     *,
     skip_through_holes: bool = False,
+    use_aux_origin: bool = True,
 ) -> list[Path]:
     """Generate SVG files from a PCB file using pcbnew plotting API.
 
@@ -340,6 +507,7 @@ def generate_svg_from_board(
         layers: Comma-separated layer names (e.g., "F.Cu" or "F.Cu,B.Cu")
         output_dir: Output directory for generated SVG files
         skip_through_holes: If True, hide drill marks/through holes in output
+        use_aux_origin: If True, use aux origin for consistent coordinate system
 
     Returns:
         List of generated SVG file paths
@@ -351,6 +519,11 @@ def generate_svg_from_board(
     # Load board directly from provided location
     board = load_board(board_file)
     logger.debug(f"  Loaded board: {board_file.name}")
+
+    # Only set aux origin if use_aux_origin is enabled
+    # Note: The aux origin should already be set in the PCB file if using fit-to-content
+    if use_aux_origin:
+        logger.debug("  Using aux origin for coordinate system alignment")
 
     # Parse layer names and create plot_plan (layer_name -> layer_id mapping)
     layer_names = [layer.strip() for layer in layers.split(",")]
@@ -375,6 +548,7 @@ def generate_svg_from_board(
 
     # Get the plot options and configure them
     plot_opts = plot_controller.GetPlotOptions()
+    plot_opts.SetUseAuxOrigin(use_aux_origin)
 
     # Configure SVG-specific parameters following kicad-kbplacer approach
     plot_opts.SetFormat(pcbnew.PLOT_FORMAT_SVG)
@@ -394,7 +568,6 @@ def generate_svg_from_board(
 
     # Configure plotting options to match kicad-cli behavior
     plot_opts.SetPlotFrameRef(False)  # No drawing sheet
-    plot_opts.SetUseAuxOrigin(False)  # Use PCB boundary for coordinate system
     plot_opts.SetPlotValue(True)  # Plot component values
     plot_opts.SetPlotReference(True)  # Plot component references
     plot_opts.SetMirror(False)  # No mirroring
@@ -409,11 +582,10 @@ def generate_svg_from_board(
 
     # Set SVG precision and units
     plot_opts.SetSvgPrecision(4)
-    plot_opts.SetSvgFitPageToBoard(True)  # Fit to board boundary
 
     # Configure hole filtering
-    plot_opts.SetSkipPlotNPTH_Pads(False)  # We handle this in our filtering
-    plot_opts.SetSketchPadsOnFabLayers(False)  # Standard pad plotting
+    plot_opts.SetSkipPlotNPTH_Pads(False)
+    plot_opts.SetSketchPadsOnFabLayers(False)
 
     try:
         generated_svgs = []

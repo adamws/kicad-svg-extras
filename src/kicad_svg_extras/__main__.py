@@ -26,10 +26,10 @@ from kicad_svg_extras.layers import (
 from kicad_svg_extras.logging import setup_logging
 from kicad_svg_extras.pcbnew_utils import (
     filter_layers_by_pcb_availability,
+    get_pcb_forced_svg_params,
 )
 from kicad_svg_extras.svg_processor import (
     add_background_to_svg,
-    fit_svg_to_content,
     merge_svg_files,
 )
 
@@ -283,6 +283,7 @@ def main():
         keep_pcb=args.keep_intermediates,
         skip_zones=args.skip_zones,
         use_css_classes=args.use_css_classes,
+        use_aux_origin=not args.no_fit_to_content,
     )
 
     unique_svgs = len(set(net_svgs.values()))
@@ -313,7 +314,10 @@ def main():
     if non_copper_layers:
         layers_str = ",".join(non_copper_layers)
         generated_svgs = svg_generator.generate_grouped_non_copper_svgs(
-            args.pcb_file, layers_str, temp_dir
+            args.pcb_file,
+            layers_str,
+            temp_dir,
+            use_aux_origin=not args.no_fit_to_content,
         )
         non_copper_svgs.update(generated_svgs)
         logger.info(f"Generated {len(generated_svgs)} non-copper SVGs in one batch")
@@ -351,15 +355,25 @@ def main():
     output_file = args.output_dir / f"colored_{layer_suffix}.svg"
 
     try:
-        merge_svg_files(all_svgs_to_merge, output_file)
-
-        # Fit to content by default (before adding background)
+        # Check if we need to force dimensions due to KiCad size limits
+        forced_width = forced_height = forced_viewbox = None
         if not args.no_fit_to_content:
-            try:
-                fit_svg_to_content(output_file)
-            except RuntimeError as e:
-                logger.warning(f"Failed to fit SVG to content: {e}")
+            needs_forcing, forced_width, forced_height, forced_viewbox = (
+                get_pcb_forced_svg_params(args.pcb_file)
+            )
+            if needs_forcing:
+                logger.debug(
+                    f"Forcing SVG dimensions to {forced_width}x{forced_height} "
+                    f"viewBox={forced_viewbox} due to KiCad page size limits"
+                )
 
+        merge_svg_files(
+            all_svgs_to_merge,
+            output_file,
+            forced_width=forced_width,
+            forced_height=forced_height,
+            forced_viewbox=forced_viewbox,
+        )
         if not args.no_background:
             add_background_to_svg(output_file, args.background_color)
         logger.info(f"Created colored SVG: {output_file}")
