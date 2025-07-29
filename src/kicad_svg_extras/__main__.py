@@ -23,7 +23,7 @@ from kicad_svg_extras.layers import (
     parse_layer_list,
     validate_layers,
 )
-from kicad_svg_extras.logging import setup_logging
+from kicad_svg_extras.log_setup import setup_logging
 from kicad_svg_extras.pcbnew_utils import (
     filter_layers_by_pcb_availability,
     get_pcb_forced_svg_params,
