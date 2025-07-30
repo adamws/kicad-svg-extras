@@ -221,6 +221,11 @@ def main():
             "net names to their CSS class names for integration purposes."
         ),
     )
+    parser.add_argument(
+        "--ignore-project-colors",
+        action="store_true",
+        help="Ignore net colors defined in the KiCad project file.",
+    )
 
     args = parser.parse_args()
 
@@ -247,7 +252,7 @@ def main():
             logger.error(f"Color configuration file not found: {args.colors}")
             sys.exit(1)
         color_source = args.colors
-    else:
+    elif not args.ignore_project_colors:
         # Try to auto-detect KiCad project file
         kicad_pro_file = find_kicad_pro_file(args.pcb_file)
         if kicad_pro_file:

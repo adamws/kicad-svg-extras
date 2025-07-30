@@ -94,6 +94,7 @@ demo-interactive:
   kicad-svg-extras --output demo/demo.svg \
     --use-css-classes \
     --export-metadata demo/metadata.json \
+    --ignore-project-colors \
     --layers "F.Cu,B.Cu" \
     --log-level INFO \
     {{ kicad_demo }}
