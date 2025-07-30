@@ -298,20 +298,45 @@ def main():
     )
 
     # Collect unique intermediate SVGs preserving user-specified layer order
-    seen = set()
+    logger.debug(f"Available net_svgs.values(): {[str(p) for p in net_svgs.values()]}")
+
+    # Determine if we're in CSS mode by checking if any styled SVGs exist
+    css_mode = len(list(temp_dir.glob("*_styled.svg"))) > 0
+    logger.debug(f"Detected CSS mode: {css_mode}")
+
     copper_svgs = []
-    # Process layers in user-specified order to maintain proper stacking
-    for layer in copper_layers:
-        for svg_path in net_svgs.values():
-            if svg_path not in seen and layer.replace(".", "_") in svg_path.name:
-                seen.add(svg_path)
-                copper_svgs.append(svg_path)
+    if css_mode:
+        # CSS mode: collect all *_styled.svg files for each copper layer
+        for layer in copper_layers:
+            layer_name = layer.replace(".", "_")
+            logger.debug(
+                f"Looking for styled SVGs for layer: {layer} "
+                f"(pattern: *{layer_name}_styled.svg)"
+            )
+
+            # Find all styled SVGs for this layer
+            layer_styled_svgs = list(temp_dir.glob(f"*{layer_name}_styled.svg"))
+            logger.debug(
+                f"Found {len(layer_styled_svgs)} styled SVGs for {layer}: "
+                f"{[p.name for p in layer_styled_svgs]}"
+            )
+
+            copper_svgs.extend(layer_styled_svgs)
+    else:
+        # Non-CSS mode: use the original logic with net_svgs.values()
+        seen = set()
+        # Process layers in user-specified order to maintain proper stacking
+        for layer in copper_layers:
+            for svg_path in net_svgs.values():
+                if svg_path not in seen and layer.replace(".", "_") in svg_path.name:
+                    seen.add(svg_path)
+                    copper_svgs.append(svg_path)
+
+    logger.debug(f"Total copper SVGs to merge: {len(copper_svgs)}")
+    for i, svg in enumerate(copper_svgs):
+        logger.debug(f"  Copper SVG {i+1}: {svg.name}")
 
     # Generate SVGs for non-copper layers and build proper layering order
-    all_svgs_to_merge = []
-
-    # Add all copper SVGs first (they're already generated and colored)
-    all_svgs_to_merge.extend(copper_svgs)
 
     # Generate SVGs for non-copper layers and insert them in proper order
     non_copper_svgs = {}

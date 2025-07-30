@@ -382,6 +382,11 @@ def net_name_to_css_class(net_name: str) -> str:
         CSS class name like net-gnd
     """
     css_name = net_name.lower()
+
+    # Replace invalid CSS characters with underscores or remove them
+    # CSS identifiers can only contain: a-z, A-Z, 0-9, -, _
+    # Must start with a letter or underscore
+
     # Replace common problematic characters
     css_name = css_name.replace("/", "-")
     css_name = css_name.replace("\\", "-")
@@ -395,17 +400,32 @@ def net_name_to_css_class(net_name: str) -> str:
     css_name = css_name.replace(":", "-")
     css_name = css_name.replace("<", "")
     css_name = css_name.replace(">", "")
+    css_name = css_name.replace("$", "")  # $ is not valid in CSS identifiers
+    css_name = css_name.replace("+", "plus")  # + is not valid, replace with word
+    css_name = css_name.replace("=", "eq")  # = is not valid, replace with word
+    css_name = css_name.replace("@", "at")  # @ is not valid, replace with word
+    css_name = css_name.replace("#", "hash")  # # is not valid, replace with word
+    css_name = css_name.replace("%", "pct")  # % is not valid, replace with word
+    css_name = css_name.replace("&", "and")  # & is not valid, replace with word
+    css_name = css_name.replace("*", "star")  # * is not valid, replace with word
+    css_name = css_name.replace("!", "not")  # ! is not valid, replace with word
+    css_name = css_name.replace("?", "q")  # ? is not valid, replace with word
+    css_name = css_name.replace("~", "tilde")  # ~ is not valid, replace with word
+    css_name = css_name.replace("^", "hat")  # ^ is not valid, replace with word
 
-    # Remove multiple consecutive dashes
-    while "--" in css_name:
-        css_name = css_name.replace("--", "-")
+    # Remove any remaining non-CSS-compliant characters using regex
+    # Keep only alphanumeric, hyphens, and underscores
+    css_name = re.sub(r"[^a-z0-9_-]", "", css_name)
 
-    # Remove leading/trailing dashes
-    css_name = css_name.strip("-")
+    # Remove multiple consecutive dashes or underscores
+    css_name = re.sub(r"[-_]{2,}", "-", css_name)
+
+    # Remove leading/trailing dashes or underscores
+    css_name = css_name.strip("-_")
 
     # Ensure it starts with a letter or underscore (CSS requirement)
     if css_name and not (css_name[0].isalpha() or css_name[0] == "_"):
-        css_name = "net-" + css_name
+        css_name = "net-" + css_name  # prefix with 'net-' for numeric nets
 
     # If empty or only invalid chars, use a default
     if not css_name:
@@ -414,8 +434,37 @@ def net_name_to_css_class(net_name: str) -> str:
     return f"net-{css_name}"
 
 
+def net_layer_to_css_class(net_name: str, layer_name: str) -> str:
+    """Convert net name and layer name to valid per-layer CSS class name.
+
+    Args:
+        net_name: Net name from PCB
+        layer_name: Layer name (e.g., 'F.Cu', 'B.Cu')
+
+    Returns:
+        CSS class name like net-gnd-f-cu
+    """
+    # Get base net class name
+    net_css = net_name_to_css_class(net_name)
+
+    # Convert layer name to CSS-safe format
+    layer_css = layer_name.lower()
+    layer_css = layer_css.replace(".", "-")
+    layer_css = layer_css.replace(" ", "-")
+    layer_css = layer_css.replace("_", "-")
+
+    # Remove leading/trailing dashes
+    layer_css = layer_css.strip("-")
+
+    return f"{net_css}-{layer_css}"
+
+
 def apply_css_class_to_svg(
-    svg_file: Path, net_name: str, fallback_color: str, output_file: Path
+    svg_file: Path,
+    net_name: str,
+    fallback_color: str,
+    output_file: Path,
+    layer_name: Optional[str] = None,
 ) -> None:
     """Apply CSS class to net SVG by removing color styles and adding class attributes.
 
@@ -424,6 +473,7 @@ def apply_css_class_to_svg(
         net_name: Name of the net (used to generate CSS class name)
         fallback_color: Color for the CSS class definition
         output_file: Output SVG file
+        layer_name: Optional layer name for per-layer CSS classes
 
     Raises:
         ColorError: If color operations fail
@@ -436,7 +486,17 @@ def apply_css_class_to_svg(
         raise ColorError(msg) from e
 
     # Generate CSS class name
-    css_class = net_name_to_css_class(net_name)
+    if layer_name:
+        css_class = net_layer_to_css_class(net_name, layer_name)
+        logger.debug(
+            f"CSS: Processing {svg_file.name} - net '{net_name}' on layer "
+            f"'{layer_name}' -> class '{css_class}'"
+        )
+    else:
+        css_class = net_name_to_css_class(net_name)
+        logger.debug(
+            f"CSS: Processing {svg_file.name} - net '{net_name}' -> class '{css_class}'"
+        )
 
     # Try to detect current copper color
     current_color = find_copper_color_in_svg(svg_file)
@@ -447,6 +507,11 @@ def apply_css_class_to_svg(
         # If we can't detect the color, just copy the file without modification
         shutil.copy2(svg_file, output_file)
         return
+
+    logger.debug(
+        f"CSS: Detected current color {current_color} in {svg_file.name}, "
+        f"target color: {hex_color}"
+    )
 
     # Read SVG content
     try:
@@ -531,6 +596,9 @@ def apply_css_class_to_svg(
     try:
         with open(output_file, "w") as f:
             f.write(content)
+        logger.debug(
+            f"CSS: Successfully applied class '{css_class}' to {output_file.name}"
+        )
     except OSError as e:
         msg = f"Failed to write SVG file {output_file}: {e}"
         raise ColorError(msg) from e

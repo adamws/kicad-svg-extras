@@ -15,10 +15,26 @@ from kicad_svg_extras.colors import (
     apply_color_to_svg,
     apply_css_class_to_svg,
     find_copper_color_in_svg,
+    net_layer_to_css_class,
 )
 from kicad_svg_extras.layers import get_copper_layers
 
 logger = logging.getLogger(__name__)
+
+
+def normalize_net_name(net_name: str) -> str:
+    """Normalize net names to ensure consistent handling of empty/no-net cases.
+
+    Args:
+        net_name: Raw net name from PCB
+
+    Returns:
+        Normalized net name where empty strings and '<no_net>' both become '<no_net>'
+    """
+    if not net_name or net_name.strip() == "":
+        return "<no_net>"
+    return net_name
+
 
 # SVG namespace
 SVG_NS = "http://www.w3.org/2000/svg"
@@ -162,11 +178,17 @@ def generate_color_grouped_svgs(
     copper_layers = get_copper_layers(layers)
 
     active_nets = []
+    seen_normalized_nets = set()
     for net_name in net_names:
-        if pcbnew_utils.has_elements_on_layers(
-            board, net_name or "<no_net>", copper_layers, net_codes
+        normalized_net_name = normalize_net_name(net_name)
+        if (
+            normalized_net_name not in seen_normalized_nets
+            and pcbnew_utils.has_elements_on_layers(
+                board, net_name or "<no_net>", copper_layers, net_codes
+            )
         ):
-            active_nets.append(net_name)
+            active_nets.append(normalized_net_name)
+            seen_normalized_nets.add(normalized_net_name)
 
     if use_css_classes:
         # Generate individual SVG per net for CSS styling
@@ -280,6 +302,33 @@ def _generate_individual_net_svgs_single_layer(
     Returns:
         Dictionary mapping net names to generated SVG file paths
     """
+    # Check for CSS class name collisions before processing
+    css_class_to_nets: dict[str, str] = {}
+
+    for net_name in active_nets:
+        css_class = net_layer_to_css_class(net_name, layer_name)
+        if css_class in css_class_to_nets:
+            # Collision detected - report all nets that map to the same class
+            existing_net = css_class_to_nets[css_class]
+            logger.error(
+                f"CSS class name collision detected! "
+                f"Net names '{existing_net}' and '{net_name}' both map to CSS "
+                f"class '{css_class}' on layer '{layer_name}'. "
+                f"This would cause styling conflicts in the generated SVG. "
+                f"Please rename one of these nets in your PCB design to avoid "
+                f"this collision."
+            )
+            error_msg = (
+                f"CSS class collision: nets '{existing_net}' and '{net_name}' "
+                f"both generate CSS class '{css_class}' on layer '{layer_name}'"
+            )
+            raise ValueError(error_msg)
+        css_class_to_nets[css_class] = net_name
+
+    logger.debug(
+        f"CSS collision check passed for {len(active_nets)} nets on layer {layer_name}"
+    )
+
     net_svgs = {}
 
     for net_name in active_nets:
@@ -319,12 +368,16 @@ def _generate_individual_net_svgs_single_layer(
             # Apply CSS class styling
             if net_color:
                 # User defined a custom color for this net
-                apply_css_class_to_svg(raw_svg, net_name, net_color, final_svg)
+                apply_css_class_to_svg(
+                    raw_svg, net_name, net_color, final_svg, layer_name
+                )
             else:
                 # No custom color defined - detect color from SVG and use that
                 detected_color = find_copper_color_in_svg(raw_svg)
                 if detected_color:
-                    apply_css_class_to_svg(raw_svg, net_name, detected_color, final_svg)
+                    apply_css_class_to_svg(
+                        raw_svg, net_name, detected_color, final_svg, layer_name
+                    )
                 else:
                     # No color detected, just copy the file without CSS processing
                     shutil.copy2(raw_svg, final_svg)
