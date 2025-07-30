@@ -7,6 +7,7 @@ import argparse
 import logging
 import shutil
 import sys
+import tempfile
 from pathlib import Path
 from typing import Optional
 
@@ -52,19 +53,22 @@ def main():
         ),
         epilog=(
             "Examples:\n"
-            "  %(prog)s --net-color 'GND:green' --net-color 'VCC:red' "
-            "board.kicad_pcb output/\n"
-            "  %(prog)s --net-color 'SIGNAL*:blue' --side front "
-            "board.kicad_pcb output/\n"
-            "  %(prog)s --colors colors.json board.kicad_pcb output/"
+            "  %(prog)s --output board.svg --net-color 'GND:green' "
+            "--net-color 'VCC:red' board.kicad_pcb\n"
+            "  %(prog)s --output board.svg --net-color 'SIGNAL*:blue' "
+            "board.kicad_pcb\n"
+            "  %(prog)s --output board.svg --colors colors.json board.kicad_pcb"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
+    parser.add_argument("pcb_file", type=Path, help="Input KiCad PCB file (.kicad_pcb)")
     parser.add_argument(
-        "pcb_file", type=Path, nargs="?", help="Input KiCad PCB file (.kicad_pcb)"
-    )
-    parser.add_argument(
-        "output_dir", type=Path, nargs="?", help="Output directory for generated SVGs"
+        "-o",
+        "--output",
+        type=Path,
+        required=True,
+        metavar="OUTPUT_FILE",
+        help="Output SVG file path",
     )
     parser.add_argument(
         "--layers",
@@ -146,13 +150,6 @@ def main():
     setup_logging(level=getattr(logging, args.log_level.upper()))
 
     # Validate inputs for SVG generation
-    if not args.pcb_file:
-        logger.error("PCB file is required for SVG generation")
-        sys.exit(1)
-
-    if not args.output_dir:
-        logger.error("Output directory is required for SVG generation")
-        sys.exit(1)
 
     if not args.pcb_file.exists():
         logger.error(f"PCB file not found: {args.pcb_file}")
@@ -269,12 +266,13 @@ def main():
     if non_copper_layers:
         logger.info(f"Processing non-copper layers: {', '.join(non_copper_layers)}")
 
-    # Create output directory
-    args.output_dir.mkdir(parents=True, exist_ok=True)
-
-    # Process the specified layers
-    temp_dir = args.output_dir / "temp"
+    # Create temporary workspace directory
+    temp_workspace = Path(tempfile.mkdtemp(prefix="kicad_svg_"))
+    temp_dir = temp_workspace / "temp"
     temp_dirs_to_cleanup = []
+
+    # Ensure output directory exists
+    args.output.parent.mkdir(parents=True, exist_ok=True)
 
     logger.info(f"Processing layers: {', '.join(layer_list)}")
 
@@ -382,9 +380,9 @@ def main():
             )
             all_svgs_to_merge.append(non_copper_svgs[layer_name])
 
-    # Create merged SVG with proper layer ordering
+    # Create merged SVG with proper layer ordering in temp workspace
     layer_suffix = "_".join(layer_list).replace(".", "_")
-    output_file = args.output_dir / f"colored_{layer_suffix}.svg"
+    temp_output_file = temp_workspace / f"colored_{layer_suffix}.svg"
 
     try:
         # Check if we need to force dimensions due to KiCad size limits
@@ -402,18 +400,21 @@ def main():
 
         merge_svg_files(
             all_svgs_to_merge,
-            output_file,
+            temp_output_file,
             forced_width=forced_width,
             forced_height=forced_height,
             forced_viewbox=forced_viewbox,
         )
         if not args.no_background:
-            add_background_to_svg(output_file, args.background_color)
-        logger.info(f"Created colored SVG: {output_file}")
+            add_background_to_svg(temp_output_file, args.background_color)
 
         logger.debug("Running result sanitization")
         logger.debug("  Remove empty groups")
-        remove_empty_groups(output_file)
+        remove_empty_groups(temp_output_file)
+
+        # Copy final SVG to user-specified output location
+        shutil.copy2(temp_output_file, args.output)
+        logger.info(f"Created colored SVG: {args.output}")
 
     except Exception as e:
         logger.error(f"Error creating colored SVG: {e}")
@@ -421,14 +422,14 @@ def main():
 
     # Track temp directories for cleanup
     if not args.keep_intermediates:
-        temp_dirs_to_cleanup.append(temp_dir)
-    elif args.keep_intermediates and temp_dir.exists():
-        logger.info(f"Intermediate files kept in: {temp_dir}")
+        temp_dirs_to_cleanup.extend([temp_dir, temp_workspace])
+    elif args.keep_intermediates and temp_workspace.exists():
+        logger.info(f"Intermediate files kept in: {temp_workspace}")
 
     # Clean up temporary files
-    for temp_dir in temp_dirs_to_cleanup:
-        if temp_dir.exists():
-            shutil.rmtree(temp_dir)
+    for temp_dir_path in temp_dirs_to_cleanup:
+        if temp_dir_path.exists():
+            shutil.rmtree(temp_dir_path)
 
     logger.info("SVG generation completed!")
 

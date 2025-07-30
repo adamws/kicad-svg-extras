@@ -40,22 +40,23 @@ class TestSVGGeneration:
         capture_outputs(output_dir)
 
         # Run CLI command
+        output_file = output_dir / "test_output.svg"
         result = cli_runner(
             [
+                "--output",
+                str(output_file),
                 "--layers",
                 "F.Cu,B.Cu",
                 "--fit-to-content",
                 fit_to_content,
                 str(pcb_file),
-                str(output_dir),
             ]
         )
 
         assert result.returncode == 0, f"CLI failed: {result.stderr}"
 
-        # Check that SVG files were generated
-        svg_files = list(output_dir.glob("*.svg"))
-        assert len(svg_files) > 0, "No SVG files were generated"
+        # Check that the output SVG file was generated
+        assert output_file.exists(), f"Expected output SVG not found: {output_file}"
 
         # Copy to references if flag is set
         capture_outputs.copy_to_references("basic", pcb_file.stem)
@@ -93,20 +94,21 @@ class TestSVGGeneration:
         # Register output directory for HTML report capture
         capture_outputs(output_dir)
 
+        output_file = output_dir / f"{test_name}.svg"
         result = cli_runner(
             [
+                "--output",
+                str(output_file),
                 "--layers",
                 layers_str,
                 str(pcb_file),
-                str(output_dir),
             ]
         )
 
         assert result.returncode == 0, f"Failed for layers {layers}: {result.stderr}"
 
-        # Verify output files exist
-        svg_files = list(output_dir.glob("*.svg"))
-        assert len(svg_files) > 0, f"No SVG files generated for layers: {layers}"
+        # Verify output file exists
+        assert output_file.exists(), f"No SVG file generated for layers: {layers}"
 
         # Copy to references if flag is set (with unique name)
         capture_outputs.copy_to_references(
@@ -133,38 +135,39 @@ class TestSVGGeneration:
         capture_outputs(output_dir)
 
         # Test with basic color config
+        output_file = output_dir / "colored_output.svg"
         result = cli_runner(
             [
+                "--output",
+                str(output_file),
                 "--layers",
                 "F.Cu,B.Cu",
                 "--colors",
                 str(sample_configs["basic"]),
                 str(pcb_file),
-                str(output_dir),
             ]
         )
 
         assert result.returncode == 0, f"Color test failed: {result.stderr}"
 
         # Check that colored SVG was generated
-        colored_svgs = list(output_dir.glob("colored_*.svg"))
-        assert len(colored_svgs) > 0, "No colored SVG files were generated"
+        assert output_file.exists(), "No colored SVG file was generated"
 
         # Verify colors are applied by checking file content
-        for svg_file in colored_svgs:
-            content = svg_file.read_text()
-            # Should contain colored elements (any hex color, not just black/white)
-            has_colors = any(
-                color_pattern in content.lower()
-                for color_pattern in [
-                    "#c83434",
-                    "#ff0000",
-                    "#0000ff",
-                    "#00ff00",
-                    "fill:#",
-                ]
-            )
-            assert has_colors, f"No colored elements found in {svg_file}"
+        svg_file = output_file
+        content = svg_file.read_text()
+        # Should contain colored elements (any hex color, not just black/white)
+        has_colors = any(
+            color_pattern in content.lower()
+            for color_pattern in [
+                "#c83434",
+                "#ff0000",
+                "#0000ff",
+                "#00ff00",
+                "fill:#",
+            ]
+        )
+        assert has_colors, f"No colored elements found in {svg_file}"
 
         # Copy to references if flag is set
         capture_outputs.copy_to_references("color_application", pcb_file.stem)
@@ -239,30 +242,22 @@ class TestLayerOrderComparison:
         self.remove_empty_groups(kicad_reference)
 
         # Generate our tool's SVG output (without custom colors to match kicad-cli)
+        our_svg_file = output_dir / "our_output.svg"
         result = cli_runner(
             [
+                "--output",
+                str(our_svg_file),
                 "--no-background",
                 "--fit-to-content",
                 "none",
                 "--layers",
                 layers_str,
                 str(pcb_file),
-                str(output_dir),
             ]
         )
 
         assert result.returncode == 0, f"Our tool failed: {result.stderr}"
-
-        # Find our tool's generated SVG file
-        # Layer names like "F.Cu,B.Cu,Edge.Cuts" become "F_Cu_B_Cu_Edge_Cuts"
-        expected_svg_name = (
-            f"colored_{layers_str.replace(',', '_').replace('.', '_')}.svg"
-        )
-        our_svg_file = output_dir / expected_svg_name
-
-        assert (
-            our_svg_file.exists()
-        ), f"Expected SVG file not found: {expected_svg_name}"
+        assert our_svg_file.exists(), f"Expected SVG file not found: {our_svg_file}"
 
         # Compare the two SVG files semantically using xmldiff
         try:
@@ -322,8 +317,10 @@ class TestErrorHandling:
 
         output_dir = temp_output_dir / "error_test"
 
+        output_file = output_dir / "should_not_exist.svg"
         result = cli_runner(
-            ["--layers", "F.Cu,B.Cu", str(invalid_file), str(output_dir)], check=False
+            ["--output", str(output_file), "--layers", "F.Cu,B.Cu", str(invalid_file)],
+            check=False,
         )
 
         assert result.returncode != 0, "Should fail with invalid PCB file"
@@ -340,8 +337,15 @@ class TestErrorHandling:
         pcb_file = pcb_files[0]
         output_dir = temp_output_dir / "invalid_layer_test"
 
+        output_file = output_dir / "should_not_exist.svg"
         cli_runner(
-            ["--layers", "Invalid.Layer,Another.Bad", str(pcb_file), str(output_dir)],
+            [
+                "--output",
+                str(output_file),
+                "--layers",
+                "Invalid.Layer,Another.Bad",
+                str(pcb_file),
+            ],
             check=False,
         )
 

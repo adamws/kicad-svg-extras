@@ -39,24 +39,28 @@ demo-simple2layer:
   set {{ bash_flags }}
   . .env/bin/activate
   rm -rf output_test
+  mkdir -p output_test
   # copper layers listed from front to bottom order, which means that bottom will be on top (first visible)
-  kicad-svg-extras --layers "F.Cu,In1.Cu,In2.Cu,B.Cu,F.SilkS,B.SilkS,Edge.Cuts" \
+  kicad-svg-extras --output output_test/result.svg \
+    --layers "F.Cu,In1.Cu,In2.Cu,B.Cu,F.SilkS,B.SilkS,Edge.Cuts" \
     --skip-zones --log-level DEBUG \
     --background-color "black" \
-    --keep-intermediates {{ kicad_demo }} output_test
-  just preview-svg output_test/colored*.svg
+    --keep-intermediates {{ kicad_demo }}
+  just preview-svg output_test/result.svg
 
 demo-simple2layer-css:
   #!/usr/bin/env bash
   set {{ bash_flags }}
   . .env/bin/activate
   rm -rf output_test_css
-  kicad-svg-extras --layers "F.Cu,In1.Cu,In2.Cu,B.Cu,F.SilkS,B.SilkS,Edge.Cuts" \
+  mkdir -p output_test_css
+  kicad-svg-extras --output output_test_css/result.svg \
+    --layers "F.Cu,In1.Cu,In2.Cu,B.Cu,F.SilkS,B.SilkS,Edge.Cuts" \
     --skip-zones --log-level DEBUG \
     --background-color "black" \
     --use-css-classes \
-    --keep-intermediates {{ kicad_demo }} output_test_css
-  just preview-svg output_test_css/colored*.svg
+    --keep-intermediates {{ kicad_demo }}
+  just preview-svg output_test_css/result.svg
 
 
 svg-mm-to-cm svg_file:
@@ -69,11 +73,10 @@ demo-kicad-cli-comparison:
   #!/usr/bin/env bash
   set {{ bash_flags }}
   . .env/bin/activate
-  rm -rf output_test_css
-  kicad-svg-extras --layers "F.Cu,B.Cu,Edge.Cuts" \
+  kicad-svg-extras --output resources/kicad-svg-extras.svg \
+    --layers "F.Cu,B.Cu,Edge.Cuts" \
     --no-background \
-    {{ kicad_demo }} output_test_tmp
-  mv output_test_tmp/colored_F_Cu_B_Cu_Edge_Cuts.svg resources/kicad-svg-extras.svg
+    {{ kicad_demo }}
 
   {{ kicad-cli }} pcb export svg --layers "F.Cu,B.Cu,Edge.Cuts" \
     --exclude-drawing-sheet --fit-page-to-board \
