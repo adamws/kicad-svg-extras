@@ -86,6 +86,33 @@ demo-kicad-cli-comparison:
   just svg-mm-to-cm resources/kicad-cli.svg
   just svg-fix-area resources/kicad-cli.svg
 
+demo-interactive:
+  #!/usr/bin/env bash
+  set {{ bash_flags }}
+  . .env/bin/activate
+  rm -rf demo/demo.svg demo/metadata.json
+  kicad-svg-extras --output demo/demo.svg \
+    --use-css-classes \
+    --export-metadata demo/metadata.json \
+    --layers "F.Cu,B.Cu" \
+    --log-level INFO \
+    {{ kicad_demo }}
+  just svg-mm-to-cm demo/demo.svg
+  echo "Interactive demo generated in demo/ directory"
+  echo "Open demo/index.html in a web browser to view"
+
+demo-serve port="8000":
+  #!/usr/bin/env bash
+  set {{ bash_flags }}
+  echo "Starting demo server at http://localhost:{{ port }}"
+  echo "Press Ctrl+C to stop"
+  if command -v python >/dev/null 2>&1; then
+    cd demo && python -m http.server {{ port }}
+  else
+    echo "Python not found. Please serve the demo/ directory with your preferred web server."
+    exit 1
+  fi
+
 test-unit:
   hatch run test-unit
 

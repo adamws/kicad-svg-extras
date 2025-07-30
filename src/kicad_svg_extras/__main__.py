@@ -4,17 +4,20 @@
 """Command line interface for net-colored SVG generator."""
 
 import argparse
+import json
 import logging
 import shutil
 import sys
 import tempfile
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from kicad_svg_extras import svg_generator
 from kicad_svg_extras.colors import (
     DEFAULT_BACKGROUND_LIGHT,
     load_color_config,
+    net_layer_to_css_class,
+    net_name_to_css_class,
     parse_color,
     resolve_net_color,
 )
@@ -44,6 +47,71 @@ def find_kicad_pro_file(pcb_file: Path) -> Optional[Path]:
     if pro_file.exists():
         return pro_file
     return None
+
+
+def _export_metadata(
+    metadata_file: Path,
+    net_names: set[str],
+    resolved_net_colors: dict[str, str],
+    layer_list: list[str],
+    *,
+    use_css_classes: bool,
+) -> None:
+    """Export net name to CSS class mapping metadata to JSON file.
+
+    Args:
+        metadata_file: Path to output metadata JSON file
+        net_names: Set of all net names from PCB
+        resolved_net_colors: Dictionary of net names to their colors
+        layer_list: List of layers being processed
+        use_css_classes: Whether CSS classes are being used
+    """
+    if not use_css_classes:
+        logger.warning("Metadata export is only meaningful with --use-css-classes")
+
+    # Ensure parent directory exists
+    metadata_file.parent.mkdir(parents=True, exist_ok=True)
+
+    # Get copper layers for CSS class generation
+    copper_layers = get_copper_layers(layer_list)
+
+    metadata: dict[str, Any] = {
+        "format_version": "1.0",
+        "generated_with_css_classes": use_css_classes,
+        "layers": layer_list,
+        "copper_layers": copper_layers,
+        "nets": {},
+    }
+
+    for net_name in sorted(net_names):
+        css_classes: dict[str, str] = {}
+        net_info: dict[str, Any] = {
+            "original_name": net_name,
+            "color": resolved_net_colors.get(
+                net_name, "#C83434"
+            ),  # Default copper color
+            "css_classes": css_classes,
+        }
+
+        if use_css_classes:
+            # Generate CSS classes for each copper layer
+            for layer in copper_layers:
+                css_class = net_layer_to_css_class(net_name, layer)
+                css_classes[layer] = css_class
+
+            # Also include generic CSS class (no layer suffix)
+            net_info["css_class_generic"] = net_name_to_css_class(net_name)
+
+        metadata["nets"][net_name] = net_info
+
+    # Write metadata to file
+    with open(metadata_file, "w", encoding="utf-8") as f:
+        json.dump(metadata, f, indent=2, ensure_ascii=False)
+
+    logger.debug(
+        f"Exported metadata for {len(net_names)} nets with {len(copper_layers)} "
+        "copper layers"
+    )
 
 
 def main():
@@ -141,6 +209,16 @@ def main():
             "'none' disables fitting (keeps original canvas), "
             "'all' uses all PCB components, "
             "'edges_only' uses only board edges (default)"
+        ),
+    )
+    parser.add_argument(
+        "--export-metadata",
+        type=Path,
+        metavar="METADATA_FILE",
+        help=(
+            "Export net name to CSS class mapping metadata to JSON file. "
+            "Only useful with --use-css-classes. Contains mapping of actual "
+            "net names to their CSS class names for integration purposes."
         ),
     )
 
@@ -415,6 +493,21 @@ def main():
         # Copy final SVG to user-specified output location
         shutil.copy2(temp_output_file, args.output)
         logger.info(f"Created colored SVG: {args.output}")
+
+        # Export metadata if requested
+        if args.export_metadata:
+            try:
+                _export_metadata(
+                    args.export_metadata,
+                    set(net_names),
+                    resolved_net_colors,
+                    layer_list,
+                    use_css_classes=args.use_css_classes,
+                )
+                logger.info(f"Exported metadata to: {args.export_metadata}")
+            except Exception as e:
+                logger.error(f"Error exporting metadata: {e}")
+                sys.exit(1)
 
     except Exception as e:
         logger.error(f"Error creating colored SVG: {e}")

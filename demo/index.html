@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KiCad SVG Extras - Interactive Net Highlighting Demo</title>
+    <script src="https://cdn.jsdelivr.net/npm/chroma-js@2.4.2/chroma.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f8f9fa;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #7f8c8d;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .demo-layout {
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            gap: 20px;
+            align-items: stretch;
+        }
+
+        .controls {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            position: sticky;
+            top: 20px;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .controls h3 {
+            margin-bottom: 15px;
+            color: #2c3e50;
+        }
+
+        .net-list {
+            list-style: none;
+            overflow-y: auto;
+            flex: 1;
+            padding-right: 5px;
+            min-height: 0;
+        }
+
+        .net-list::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .net-list::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 3px;
+        }
+
+        .net-list::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 3px;
+        }
+
+        .net-list::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+
+        .net-item {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            margin: 2px 0;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 1px solid transparent;
+        }
+
+        .net-item:hover {
+            background: #f1f3f4;
+        }
+
+        .net-item.selected {
+            background: #e3f2fd;
+            border-color: #2196f3;
+        }
+
+        .net-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 3px;
+            margin-right: 10px;
+            border: 1px solid #ddd;
+        }
+
+        .net-color-multi {
+            display: flex;
+            overflow: hidden;
+        }
+
+        .net-color-strip {
+            height: 100%;
+            flex-shrink: 0;
+        }
+
+        .net-color-strip:first-child {
+            border-radius: 3px 0 0 3px;
+        }
+
+        .net-color-strip:last-child {
+            border-radius: 0 3px 3px 0;
+        }
+
+        .net-color-strip:only-child {
+            border-radius: 3px;
+        }
+
+        .net-name {
+            font-weight: 500;
+            flex: 1;
+        }
+
+        .layer-badges {
+            display: flex;
+            gap: 2px;
+        }
+
+        .layer-badge {
+            background: #e0e0e0;
+            color: #666;
+            font-size: 10px;
+            padding: 2px 4px;
+            border-radius: 2px;
+        }
+
+        .svg-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+
+        .pcb-svg {
+            max-width: 100%;
+            height: auto;
+            background: #ffffff;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+        }
+
+        .info-panel {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            border-left: 4px solid #2196f3;
+        }
+
+        .reset-view {
+            width: auto;
+            padding: 8px 16px;
+            margin-top: 15px;
+            background: #2196f3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.2s;
+            font-size: 14px;
+        }
+
+        .reset-view:hover {
+            background: #1976d2;
+        }
+
+        .layer-controls {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .layer-toggle {
+            padding: 6px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: #f5f5f5;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 13px;
+            font-weight: 500;
+            color: #666;
+        }
+
+        .layer-toggle.active {
+            background: #2196f3;
+            color: white;
+            border-color: #2196f3;
+        }
+
+        .layer-toggle:hover {
+            border-color: #2196f3;
+        }
+
+        .layer-toggle.active:hover {
+            background: #1976d2;
+        }
+
+
+        @media (max-width: 768px) {
+            .demo-layout {
+                grid-template-columns: 1fr;
+            }
+
+            .controls {
+                position: static;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Interactive Net Highlighting Demo</h1>
+            <p>
+                This demo showcases the CSS-enabled SVG output from kicad-svg-extras.
+                Click on any net in the list to highlight it on the PCB. The SVG uses CSS classes
+                for each net, allowing for dynamic styling and interactive features.
+            </p>
+        </div>
+
+        <div class="demo-layout">
+            <div class="svg-container">
+                <div class="layer-controls" id="layerControls">
+                    <!-- Layer toggle buttons will be populated by JavaScript -->
+                </div>
+                <div id="svgContainer">
+                    <!-- SVG will be loaded here -->
+                    <p>Loading PCB...</p>
+                </div>
+                <button class="reset-view" onclick="resetSvgView()">Reset View</button>
+            </div>
+
+            <div class="controls">
+                <h3>Nets</h3>
+                <ul class="net-list" id="netList">
+                    <!-- Net list will be populated by JavaScript -->
+                </ul>
+
+                <div class="info-panel">
+                    <strong>How it works:</strong><br>
+                    Each net is assigned CSS classes like <code>.net-gnd-f-cu</code> for per-layer styling.
+                    This enables interactive highlighting, custom themes, and easy integration into web applications.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="demo.js"></script>
+</body>
+</html>
