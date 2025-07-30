@@ -42,7 +42,6 @@ demo-simple2layer:
   # copper layers listed from front to bottom order, which means that bottom will be on top (first visible)
   kicad-svg-extras --layers "F.Cu,In1.Cu,In2.Cu,B.Cu,F.SilkS,B.SilkS,Edge.Cuts" \
     --skip-zones --log-level DEBUG \
-    --net-color "GND:red" --net-color "VCC:blue" --net-color "VPP:green" \
     --background-color "black" \
     --keep-intermediates {{ kicad_demo }} output_test
   just preview-svg output_test/colored*.svg
@@ -54,7 +53,7 @@ demo-simple2layer-css:
   rm -rf output_test_css
   kicad-svg-extras --layers "F.Cu,In1.Cu,In2.Cu,B.Cu,F.SilkS,B.SilkS,Edge.Cuts" \
     --skip-zones --log-level DEBUG \
-    --net-color "GND:red" --net-color "VCC:blue" --net-color "VPP:green" \
+    --background-color "black" \
     --use-css-classes \
     --keep-intermediates {{ kicad_demo }} output_test_css
   just preview-svg output_test_css/colored*.svg
