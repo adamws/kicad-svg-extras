@@ -7,6 +7,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
+from xmldiff import main as xmldiff_main
 
 
 @pytest.mark.functional
@@ -188,11 +189,11 @@ class TestLayerOrderComparison:
         _remove_empty_groups(root)
         tree.write(svg_file, encoding="unicode")
 
-    def test_layer_order_matches_kicad_cli(
+    def test_with_kicad_cli_reference(
         self, cli_runner, temp_output_dir, pcb_files_dir, capture_outputs
     ):
-        """Test that our layer merging produces the same structure
-        as KiCad CLI export."""
+        """Test that our SVG generation produces semantically equivalent output
+        to KiCad CLI export using xmldiff for comparison."""
 
         pcb_file = pcb_files_dir / "very_simple_2layer/udb.kicad_pcb"
         assert Path(pcb_file).is_file()
@@ -251,7 +252,63 @@ class TestLayerOrderComparison:
         )
 
         assert result.returncode == 0, f"Our tool failed: {result.stderr}"
-        # right now we aim for visual equality, SVGs are not yet exactly equal
+
+        # Find our tool's generated SVG file
+        # Layer names like "F.Cu,B.Cu,Edge.Cuts" become "F_Cu_B_Cu_Edge_Cuts"
+        expected_svg_name = (
+            f"colored_{layers_str.replace(',', '_').replace('.', '_')}.svg"
+        )
+        our_svg_file = output_dir / expected_svg_name
+
+        assert (
+            our_svg_file.exists()
+        ), f"Expected SVG file not found: {expected_svg_name}"
+
+        # Compare the two SVG files semantically using xmldiff
+        try:
+            # Get diff between the two SVG files
+            diff_result = xmldiff_main.diff_files(
+                str(kicad_reference),
+                str(our_svg_file),
+                formatter=xmldiff_main.FORMATTERS["diff"](),
+            )
+
+            # Filter out metadata differences (title, desc elements)
+            if diff_result:
+                # Convert to string to analyze differences
+                diff_str = str(diff_result)
+
+                # Check if differences are only metadata-related
+                lines = diff_str.strip().split("\n")
+                non_metadata_diffs = []
+
+                for line in lines:
+                    # Skip differences related to title and desc elements
+                    # and their content
+                    is_metadata_diff = (
+                        "title]" in line
+                        or "desc]" in line
+                        or "update-text, /*/*[1]" in line  # title content
+                        or "update-text, /*/*[2]" in line  # desc content
+                        or (
+                            "move" in line and ("/*/*[1]" in line or "/*/*[12]" in line)
+                        )  # title/desc element moves
+                    )
+
+                    if not is_metadata_diff:
+                        non_metadata_diffs.append(line)
+
+                # If there are substantial non-metadata differences, fail the test
+                if non_metadata_diffs:
+                    pytest.fail(
+                        f"SVG files have substantial differences beyond metadata. "
+                        f"Non-metadata differences between {kicad_reference} "
+                        f"and {our_svg_file}:\n"
+                        f"{chr(10).join(non_metadata_diffs)}"
+                    )
+                # Otherwise, consider it a pass (only metadata differences)
+        except Exception as e:
+            pytest.fail(f"Failed to compare SVG files with xmldiff: {e}")
 
 
 @pytest.mark.functional

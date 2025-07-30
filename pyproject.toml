@@ -47,6 +47,7 @@ dependencies = [
   "coverage[toml]>=6.5",
   "pytest",
   "pytest-html",
+  "xmldiff>=2.7",
 ]
 
 [tool.hatch.envs.default.scripts]
@@ -164,8 +165,8 @@ module = [
     "wx.*",
     "pytest",
     "pytest.*",
-    "svgpathtools",
-    "svgpathtools.*",
+    "xmldiff",
+    "xmldiff.*",
 ]
 ignore_missing_imports = true
 
