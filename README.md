@@ -4,6 +4,7 @@
 
 _Generate colored SVG files from KiCad PCB files with advanced styling options._
 
+[![CI - Main](https://github.com/adamws/kicad-svg-extras/actions/workflows/ci.yml/badge.svg)](https://github.com/adamws/kicad-svg-extras/actions/workflows/ci.yml)
 [![Interactive Demo](https://img.shields.io/badge/🎨_Interactive_Demo-Try_Now-blue)](https://adamws.github.io/kicad-svg-extras/)
 
 </div>
