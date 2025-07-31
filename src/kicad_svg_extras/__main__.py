@@ -226,6 +226,17 @@ def main():
         action="store_true",
         help="Ignore net colors defined in the KiCad project file.",
     )
+    parser.add_argument(
+        "-t",
+        "--theme",
+        type=str,
+        default="user",
+        metavar="THEME_NAME",
+        help=(
+            "Color theme to use (will default to PCB editor settings if "
+            "theme not found)"
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -371,6 +382,7 @@ def main():
         use_css_classes=args.use_css_classes,
         use_aux_origin=args.fit_to_content != "none",
         bound_with_edges_only=edges_only,
+        theme=args.theme,
     )
 
     unique_svgs = len(set(net_svgs.values()))
@@ -431,6 +443,7 @@ def main():
             temp_dir,
             use_aux_origin=args.fit_to_content != "none",
             bound_with_edges_only=edges_only,
+            theme=args.theme,
         )
         non_copper_svgs.update(generated_svgs)
         logger.info(f"Generated {len(generated_svgs)} non-copper SVGs in one batch")

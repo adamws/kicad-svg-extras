@@ -512,6 +512,7 @@ def generate_svg_from_board(
     *,
     skip_through_holes: bool = False,
     use_aux_origin: bool = True,
+    theme: str = "user",
 ) -> list[Path]:
     """Generate SVG files from a PCB file using pcbnew plotting API.
 
@@ -524,6 +525,7 @@ def generate_svg_from_board(
         output_dir: Output directory for generated SVG files
         skip_through_holes: If True, hide drill marks/through holes in output
         use_aux_origin: If True, use aux origin for consistent coordinate system
+        theme: Color theme to use for SVG generation
 
     Returns:
         List of generated SVG file paths
@@ -571,14 +573,14 @@ def generate_svg_from_board(
     # Set output directory (use absolute path to be sure)
     plot_opts.SetOutputDirectory(str(output_dir.absolute()))
 
-    # Set color settings - try default since kicad-cli said "user" not found
+    # Set color settings - try the specified theme first, fallback to default
     try:
-        color_settings = pcbnew.GetSettingsManager().GetColorSettings("user")
-        logger.debug(f"  Using 'user' color settings: {color_settings}")
+        color_settings = pcbnew.GetSettingsManager().GetColorSettings(theme)
+        logger.debug(f"  Using '{theme}' user color settings")
     except Exception:
         # Fallback to default color settings (kicad-cli uses PCB Editor settings)
         color_settings = pcbnew.GetSettingsManager().GetColorSettings()
-        logger.debug(f"  Using default color settings: {color_settings}")
+        logger.debug("  Using default color settings")
 
     plot_opts.SetColorSettings(color_settings)
 

@@ -52,6 +52,7 @@ def generate_svg_files(
     keep_pcb: bool = False,
     use_aux_origin: bool = True,
     bound_with_edges_only: bool = False,
+    theme: str = "user",
 ) -> list[Path]:
     """Generate individual SVG files for layers
 
@@ -69,6 +70,7 @@ def generate_svg_files(
         use_aux_origin: If True, use aux origin for consistent coordinate system
         bound_with_edges_only: If True, use only board edges for bounding
                                box calculation
+        theme: Color theme to use for SVG generation
 
     Returns:
         List of generated SVG file paths
@@ -92,6 +94,7 @@ def generate_svg_files(
                 output_dir,
                 skip_through_holes=skip_through_holes,
                 use_aux_origin=use_aux_origin,
+                theme=theme,
             )
             return generated_svgs
         finally:
@@ -118,6 +121,7 @@ def generate_svg_files(
                 output_dir,
                 skip_through_holes=skip_through_holes,
                 use_aux_origin=use_aux_origin,
+                theme=theme,
             )
             return generated_svgs
         finally:
@@ -132,6 +136,7 @@ def generate_svg_files(
             output_dir,
             skip_through_holes=skip_through_holes,
             use_aux_origin=use_aux_origin,
+            theme=theme,
         )
         return generated_svgs
 
@@ -147,6 +152,7 @@ def generate_color_grouped_svgs(
     use_css_classes: bool = False,
     use_aux_origin: bool = True,
     bound_with_edges_only: bool = False,
+    theme: str = "user",
 ) -> dict[str, Path]:
     """Generate SVGs grouped by color for optimization, or individual SVGs for CSS.
 
@@ -162,6 +168,7 @@ def generate_color_grouped_svgs(
         use_aux_origin: If True, use aux origin for consistent coordinate system
         bound_with_edges_only: If True, use only board edges for bounding
                                box calculation
+        theme: Color theme to use for SVG generation
 
     Returns:
         Dictionary mapping net names to generated SVG file paths
@@ -202,6 +209,7 @@ def generate_color_grouped_svgs(
             skip_zones=skip_zones,
             use_aux_origin=use_aux_origin,
             bound_with_edges_only=bound_with_edges_only,
+            theme=theme,
         )
     else:
         # Color grouping approach - process each layer separately then merge
@@ -215,6 +223,7 @@ def generate_color_grouped_svgs(
             skip_zones=skip_zones,
             use_aux_origin=use_aux_origin,
             bound_with_edges_only=bound_with_edges_only,
+            theme=theme,
         )
 
 
@@ -229,6 +238,7 @@ def _generate_individual_net_svgs_per_layer(
     skip_zones: bool,
     use_aux_origin: bool = True,
     bound_with_edges_only: bool = False,
+    theme: str = "user",
 ) -> dict[str, Path]:
     """Generate individual SVG per net with CSS classes, processing each layer.
 
@@ -243,6 +253,7 @@ def _generate_individual_net_svgs_per_layer(
         use_aux_origin: If True, use aux origin for consistent coordinate system
         bound_with_edges_only: If True, use only board edges for bounding
                                box calculation
+        theme: Color theme to use for SVG generation
 
     Returns:
         Dictionary mapping net names to generated SVG file paths
@@ -260,6 +271,7 @@ def _generate_individual_net_svgs_per_layer(
             skip_zones=skip_zones,
             use_aux_origin=use_aux_origin,
             bound_with_edges_only=bound_with_edges_only,
+            theme=theme,
         )
         # Collect SVGs for this layer
         layer_svgs.extend(layer_net_svgs.values())
@@ -284,6 +296,7 @@ def _generate_individual_net_svgs_single_layer(
     skip_zones: bool,
     use_aux_origin: bool = True,
     bound_with_edges_only: bool = False,
+    theme: str = "user",
 ) -> dict[str, Path]:
     """Generate individual SVG per net with CSS classes for a single layer.
 
@@ -298,6 +311,7 @@ def _generate_individual_net_svgs_single_layer(
         use_aux_origin: If True, use aux origin for consistent coordinate system
         bound_with_edges_only: If True, use only board edges for bounding
                                box calculation
+        theme: Color theme to use for SVG generation
 
     Returns:
         Dictionary mapping net names to generated SVG file paths
@@ -360,6 +374,7 @@ def _generate_individual_net_svgs_single_layer(
                 keep_pcb=keep_pcb,
                 use_aux_origin=use_aux_origin,
                 bound_with_edges_only=bound_with_edges_only,
+                theme=theme,
             )
             # Single layer generates exactly one SVG file
             if generated_svgs:
@@ -405,6 +420,7 @@ def _generate_grouped_net_svgs_per_layer(
     skip_zones: bool,
     use_aux_origin: bool = True,
     bound_with_edges_only: bool = False,
+    theme: str = "user",
 ) -> dict[str, Path]:
     """Generate SVGs grouped by color, processing each layer separately then merging.
 
@@ -419,6 +435,7 @@ def _generate_grouped_net_svgs_per_layer(
         use_aux_origin: If True, use aux origin for consistent coordinate system
         bound_with_edges_only: If True, use only board edges for bounding
                                box calculation
+        theme: Color theme to use for SVG generation
 
     Returns:
         Dictionary mapping net names to generated SVG file paths
@@ -439,6 +456,7 @@ def _generate_grouped_net_svgs_per_layer(
             skip_through_holes=not is_last_layer,
             use_aux_origin=use_aux_origin,
             bound_with_edges_only=bound_with_edges_only,
+            theme=theme,
         )
         # Collect unique SVGs for this layer (in order)
         unique_layer_svgs = list(set(layer_net_svgs.values()))
@@ -471,6 +489,7 @@ def _generate_grouped_net_svgs_single_layer(
     skip_through_holes: bool = False,
     use_aux_origin: bool = True,
     bound_with_edges_only: bool = False,
+    theme: str = "user",
 ) -> dict[str, Path]:
     """Generate SVGs grouped by color for a single layer (original approach).
 
@@ -486,6 +505,7 @@ def _generate_grouped_net_svgs_single_layer(
         use_aux_origin: If True, use aux origin for consistent coordinate system
         bound_with_edges_only: If True, use only board edges for bounding
                                box calculation
+        theme: Color theme to use for SVG generation
 
     Returns:
         Dictionary mapping net names to generated SVG file paths
@@ -527,6 +547,7 @@ def _generate_grouped_net_svgs_single_layer(
                 keep_pcb=keep_pcb,
                 use_aux_origin=use_aux_origin,
                 bound_with_edges_only=bound_with_edges_only,
+                theme=theme,
             )
             # Single layer generates exactly one SVG file
             if generated_svgs:
@@ -564,6 +585,7 @@ def _generate_grouped_net_svgs_single_layer(
                 keep_pcb=keep_pcb,
                 use_aux_origin=use_aux_origin,
                 bound_with_edges_only=bound_with_edges_only,
+                theme=theme,
             )
             # Single layer generates exactly one SVG file
             if generated_svgs:
@@ -594,6 +616,7 @@ def generate_grouped_non_copper_svgs(
     *,
     use_aux_origin: bool = True,
     bound_with_edges_only: bool = False,
+    theme: str = "user",
 ) -> dict[str, Path]:
     """Generate SVGs for multiple non-copper layers in a single batch operation.
 
@@ -604,6 +627,7 @@ def generate_grouped_non_copper_svgs(
         use_aux_origin: If True, use aux origin for consistent coordinate system
         bound_with_edges_only: If True, use only board edges for bounding
                                box calculation
+        theme: Color theme to use for SVG generation
 
     Returns:
         Dict mapping layer name to generated SVG path
@@ -624,6 +648,7 @@ def generate_grouped_non_copper_svgs(
                 output_dir,
                 skip_through_holes=True,
                 use_aux_origin=use_aux_origin,
+                theme=theme,
             )
         finally:
             # Clean up temp PCB
@@ -637,6 +662,7 @@ def generate_grouped_non_copper_svgs(
             output_dir,
             skip_through_holes=True,
             use_aux_origin=use_aux_origin,
+            theme=theme,
         )
 
     # Parse layer names to create mapping
