@@ -2,6 +2,9 @@ let metadata = null;
 let currentSelection = null;
 let originalSvgStyles = null; // Store original SVG styles for restoration
 
+// Store custom user-selected colors for nets
+let customNetColors = new Map(); // netName -> hexColor
+
 // SVG zoom and pan state
 let svgZoom = 1;
 let svgPanX = 0;
@@ -223,6 +226,9 @@ function resetSvgView() {
     svgPanY = 0;
     applySvgTransform();
 
+    // Reset custom net colors
+    customNetColors.clear();
+
     // Reset layer selections - make all layers visible
     if (metadata && metadata.copper_layers) {
         visibleLayers.clear();
@@ -240,6 +246,9 @@ function resetSvgView() {
         updateLayerVisibility();
         populateNetList();
     }
+
+    // Clear any current selection and restore original colors
+    clearSelection();
 }
 
 function setupSvgInteractions() {
@@ -352,6 +361,9 @@ async function loadDemo() {
         // Populate net list
         populateNetList();
 
+        // Apply any custom colors that might be set
+        applyCustomColors();
+
     } catch (error) {
         console.error('Error loading demo:', error);
         document.getElementById('svgContainer').innerHTML =
@@ -387,50 +399,58 @@ function populateNetList() {
         // Only show the net if it exists on at least one visible layer
         if (visibleActualLayers.length === 0) return;
 
-        // Get actual colors for each visible layer from SVG CSS
-        const originalColors = parseColorsFromSvgCss(originalSvgStyles);
-        const layerColors = [];
+        // Check if user has set a custom color for this net
+        let uniqueColors;
+        if (customNetColors.has(netName)) {
+            // Use custom color for all layers (like KiCad does)
+            uniqueColors = [customNetColors.get(netName)];
+        } else {
+            // Get actual colors for each visible layer from SVG CSS
+            const originalColors = parseColorsFromSvgCss(originalSvgStyles);
+            const layerColors = [];
 
-        visibleActualLayers.forEach(layer => {
-            const cssClass = netInfo.css_classes[layer];
-            if (cssClass && originalColors.has(cssClass)) {
-                const classColors = originalColors.get(cssClass);
-                if (classColors.fill) {
-                    layerColors.push(classColors.fill);
+            visibleActualLayers.forEach(layer => {
+                const cssClass = netInfo.css_classes[layer];
+                if (cssClass && originalColors.has(cssClass)) {
+                    const classColors = originalColors.get(cssClass);
+                    if (classColors.fill) {
+                        layerColors.push(classColors.fill);
+                    }
                 }
-            }
-        });
+            });
 
-        // Remove duplicates and fallback to generic color if no layer colors found
-        const uniqueColors = [...new Set(layerColors)];
-        if (uniqueColors.length === 0) {
-            uniqueColors.push(netInfo.color);
+            // Remove duplicates and fallback to generic color if no layer colors found
+            uniqueColors = [...new Set(layerColors)];
+            if (uniqueColors.length === 0) {
+                uniqueColors.push(netInfo.color);
+            }
         }
 
         const li = document.createElement('li');
         li.className = 'net-item';
-        li.onclick = () => selectNet(netName);
 
         // Create color display - single color or multiple colors
         let colorDisplay;
         if (uniqueColors.length === 1) {
-            colorDisplay = `<div class="net-color" style="background-color: ${uniqueColors[0]}"></div>`;
+            colorDisplay = `<div class="net-color" style="background-color: ${uniqueColors[0]}" onclick="openColorPickerForNet('${netName}', event)"></div>`;
         } else {
-            // Multiple colors - create a split color display
+            // Multiple colors - create a split color display (but still clickable for custom color)
             const colorWidth = 100 / uniqueColors.length;
             const colorStrips = uniqueColors.map((color, index) =>
                 `<div class="net-color-strip" style="background-color: ${color}; width: ${colorWidth}%"></div>`
             ).join('');
-            colorDisplay = `<div class="net-color net-color-multi">${colorStrips}</div>`;
+            colorDisplay = `<div class="net-color net-color-multi" onclick="openColorPickerForNet('${netName}', event)">${colorStrips}</div>`;
         }
 
         li.innerHTML = `
             ${colorDisplay}
-            <div class="net-name">${netName}</div>
-            <div class="layer-badges">
-                ${visibleActualLayers.map(layer =>
-                    `<span class="layer-badge">${layer}</span>`
-                ).join('')}
+            <div class="net-content" onclick="selectNet('${netName}')">
+                <div class="net-name">${netName}</div>
+                <div class="layer-badges">
+                    ${visibleActualLayers.map(layer =>
+                        `<span class="layer-badge">${layer}</span>`
+                    ).join('')}
+                </div>
             </div>
         `;
 
@@ -482,31 +502,59 @@ function highlightNet(netName) {
     // Parse original colors from SVG CSS
     const originalColors = parseColorsFromSvgCss(originalSvgStyles);
 
-    // Start with original styles
+    // Start with custom colors applied, then add highlighting
     let modifiedStyles = originalSvgStyles;
 
-    // Replace colors for each CSS class of this net, using per-layer colors
+    // First apply custom colors
+    customNetColors.forEach((customColor, customNetName) => {
+        const customNetInfo = metadata.nets[customNetName];
+        if (!customNetInfo) return;
+
+        Object.values(customNetInfo.css_classes).forEach(cssClass => {
+            const classRuleRegex = new RegExp(`(\\.${cssClass}\\s*\\{[^}]*\\})`, 'g');
+            modifiedStyles = modifiedStyles.replace(classRuleRegex, (match) => {
+                let result = match;
+                if (result.includes('fill:')) {
+                    result = result.replace(/fill:\s*[^;]+/g, `fill: ${customColor}`);
+                }
+                if (result.includes('stroke:') && !result.includes('stroke: none')) {
+                    result = result.replace(/stroke:\s*[^;]+/g, `stroke: ${customColor}`);
+                }
+                return result;
+            });
+        });
+    });
+
+    // Then apply highlighting for the selected net
     Object.values(netInfo.css_classes).forEach(cssClass => {
         const elements = svg.querySelectorAll(`.${cssClass}`);
         console.log(`Found ${elements.length} elements for class: ${cssClass}`);
 
         if (elements.length > 0) {
-            const originalClassColors = originalColors.get(cssClass);
-            if (originalClassColors) {
-                // Calculate highlight colors based on original colors for this specific layer
-                const highlightFill = originalClassColors.fill ? getKiCadHighlightColor(originalClassColors.fill) : null;
-                const highlightStroke = originalClassColors.stroke ? getKiCadHighlightColor(originalClassColors.stroke) : null;
+            // Check if this net has a custom color
+            const hasCustomColor = customNetColors.has(netName);
+            const customColor = hasCustomColor ? customNetColors.get(netName) : null;
 
-                console.log(`${cssClass}: fill ${originalClassColors.fill} -> ${highlightFill}, stroke ${originalClassColors.stroke} -> ${highlightStroke}`);
+            const originalClassColors = originalColors.get(cssClass);
+            if (originalClassColors || hasCustomColor) {
+                // Use custom color if available, otherwise use original colors
+                const baseColorFill = hasCustomColor ? customColor : originalClassColors.fill;
+                const baseColorStroke = hasCustomColor ? customColor : originalClassColors.stroke;
+
+                // Calculate highlight colors based on base colors
+                const highlightFill = baseColorFill ? getKiCadHighlightColor(baseColorFill) : null;
+                const highlightStroke = baseColorStroke ? getKiCadHighlightColor(baseColorStroke) : null;
+
+                console.log(`${cssClass}: fill ${baseColorFill} -> ${highlightFill}, stroke ${baseColorStroke} -> ${highlightStroke}`);
 
                 // Replace colors in CSS rule for this specific class
                 const classRegex = new RegExp(`(\\.${cssClass}\\s*\\{[^}]*)(fill:\\s*[^;]+|stroke:\\s*[^;]+)([^}]*\\})`, 'gi');
                 modifiedStyles = modifiedStyles.replace(classRegex, (match) => {
                     let result = match;
-                    if (highlightFill && originalClassColors.fill) {
+                    if (highlightFill && (originalClassColors.fill || hasCustomColor)) {
                         result = result.replace(/fill:\s*[^;]+/gi, `fill: ${highlightFill}`);
                     }
-                    if (highlightStroke && originalClassColors.stroke) {
+                    if (highlightStroke && (originalClassColors.stroke || hasCustomColor)) {
                         result = result.replace(/stroke:\s*[^;]+/gi, `stroke: ${highlightStroke}`);
                     }
                     return result;
@@ -528,14 +576,114 @@ function clearSelection() {
         item.classList.remove('selected');
     });
 
-    // Restore original SVG styles
+    // Apply custom colors (without highlighting)
+    applyCustomColors();
+}
+
+// Apply custom net colors by modifying CSS rules (persistent)
+function applyCustomColors() {
     const svg = document.querySelector('svg');
     const svgStyleElement = svg ? svg.querySelector('style') : null;
 
-    if (svgStyleElement && originalSvgStyles) {
-        svgStyleElement.textContent = originalSvgStyles;
-        console.log('Restored original SVG styles');
+    if (!svg || !svgStyleElement || !metadata || !originalSvgStyles) {
+        console.log('Missing SVG, style element, metadata, or original styles');
+        return;
     }
+
+    // Start with original styles
+    let modifiedStyles = originalSvgStyles;
+
+    // Apply custom colors for each net that has them
+    customNetColors.forEach((customColor, netName) => {
+        const netInfo = metadata.nets[netName];
+        if (!netInfo) return;
+
+        // Replace colors for each CSS class of this net
+        Object.values(netInfo.css_classes).forEach(cssClass => {
+            const elements = svg.querySelectorAll(`.${cssClass}`);
+            if (elements.length > 0) {
+                console.log(`Applying custom color ${customColor} to class ${cssClass}`);
+
+                // Find and replace the CSS rule for this specific class
+                const classRuleRegex = new RegExp(`(\\.${cssClass}\\s*\\{[^}]*\\})`, 'g');
+                modifiedStyles = modifiedStyles.replace(classRuleRegex, (match) => {
+                    let result = match;
+                    // Replace fill color if it exists
+                    if (result.includes('fill:')) {
+                        result = result.replace(/fill:\s*[^;]+/g, `fill: ${customColor}`);
+                    }
+                    // Replace stroke color if it exists and is not 'none'
+                    if (result.includes('stroke:') && !result.includes('stroke: none')) {
+                        result = result.replace(/stroke:\s*[^;]+/g, `stroke: ${customColor}`);
+                    }
+                    return result;
+                });
+            }
+        });
+    });
+
+    // Apply the modified styles to the SVG
+    svgStyleElement.textContent = modifiedStyles;
+    console.log('Applied custom colors persistently');
+}
+
+// Color picker functionality
+function openColorPickerForNet(netName, event) {
+    event.stopPropagation(); // Prevent net selection when clicking color
+
+    const colorPicker = document.getElementById('netColorPicker');
+
+    // Set current color as default
+    const currentColor = customNetColors.get(netName) || getNetDisplayColor(netName);
+    colorPicker.value = currentColor;
+
+    // Set up color change handler
+    colorPicker.onchange = function() {
+        customNetColors.set(netName, colorPicker.value);
+        populateNetList(); // Refresh the net list to show new color
+        applyCustomColors(); // Apply the custom color to SVG
+
+        // If this net is currently selected, update the highlighting
+        if (currentSelection === netName) {
+            highlightNet(netName);
+        }
+    };
+
+    // Trigger the color picker
+    colorPicker.click();
+}
+
+// Get the display color for a net (custom color or original)
+function getNetDisplayColor(netName) {
+    if (customNetColors.has(netName)) {
+        return customNetColors.get(netName);
+    }
+
+    const netInfo = metadata.nets[netName];
+    if (!netInfo) return '#C83434'; // fallback
+
+    // Get actual layers and colors from SVG CSS
+    const actualLayers = getNetActualLayers(netName, netInfo);
+    const visibleActualLayers = actualLayers.filter(layer => visibleLayers.has(layer));
+
+    if (visibleActualLayers.length === 0) return netInfo.color;
+
+    const originalColors = parseColorsFromSvgCss(originalSvgStyles);
+    const layerColors = [];
+
+    visibleActualLayers.forEach(layer => {
+        const cssClass = netInfo.css_classes[layer];
+        if (cssClass && originalColors.has(cssClass)) {
+            const classColors = originalColors.get(cssClass);
+            if (classColors.fill) {
+                layerColors.push(classColors.fill);
+            }
+        }
+    });
+
+    // Return first unique color or fallback
+    const uniqueColors = [...new Set(layerColors)];
+    return uniqueColors.length > 0 ? uniqueColors[0] : netInfo.color;
 }
 
 // Load demo when page loads

@@ -41,7 +41,7 @@
 
         .header p {
             color: #7f8c8d;
-            max-width: 600px;
+            max-width: 800px;
             margin: 0 auto;
         }
 
@@ -98,19 +98,26 @@
         .net-item {
             display: flex;
             align-items: center;
-            padding: 8px 12px;
             margin: 2px 0;
             border-radius: 4px;
-            cursor: pointer;
-            transition: all 0.2s ease;
             border: 1px solid transparent;
         }
 
-        .net-item:hover {
+        .net-content {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px 8px 0;
+            flex: 1;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border-radius: 4px;
+        }
+
+        .net-content:hover {
             background: #f1f3f4;
         }
 
-        .net-item.selected {
+        .net-item.selected .net-content {
             background: #e3f2fd;
             border-color: #2196f3;
         }
@@ -119,8 +126,22 @@
             width: 16px;
             height: 16px;
             border-radius: 3px;
-            margin-right: 10px;
+            margin: 8px 6px 8px 12px;
             border: 1px solid #ddd;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            position: relative;
+            flex-shrink: 0;
+        }
+
+        .net-color:hover {
+            border-color: #2196f3;
+            box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2);
+            transform: scale(1.1);
+        }
+
+        .net-color:active {
+            transform: scale(0.95);
         }
 
         .net-color-multi {
@@ -148,6 +169,8 @@
         .net-name {
             font-weight: 500;
             flex: 1;
+            padding-left: 8px;
+            border-left: 2px solid #e0e0e0;
         }
 
         .layer-badges {
@@ -259,7 +282,8 @@
                 <a href="https://github.com/adamws/kicad-svg-extras" target="_blank" rel="noopener noreferrer">
                     kicad-svg-extras
                 </a>.
-                Click on any net in the list to highlight it on the PCB. The SVG uses CSS classes
+                Click on any net in the list to highlight it on the PCB. Click on the color rectangles
+                to customize net colors - your changes will persist until you reset the view. The SVG uses CSS classes
                 for each net, allowing for dynamic styling and interactive features.
             </p>
         </div>
@@ -282,10 +306,15 @@
                     <!-- Net list will be populated by JavaScript -->
                 </ul>
 
+                <!-- Hidden color picker -->
+                <input type="color" id="netColorPicker" style="display: none;">
+
                 <div class="info-panel">
                     <strong>How it works:</strong><br>
                     Each net is assigned CSS classes like <code>.net-gnd-f-cu</code> for per-layer styling.
                     This enables interactive highlighting, custom themes, and easy integration into web applications.
+                    <br><br>
+                    <strong>💡 Tip:</strong> Click on the color squares next to net names to customize colors!
                 </div>
             </div>
         </div>
