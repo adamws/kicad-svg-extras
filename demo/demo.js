@@ -686,5 +686,166 @@ function getNetDisplayColor(netName) {
     return uniqueColors.length > 0 ? uniqueColors[0] : netInfo.color;
 }
 
+// SVG Export functionality
+function exportCustomizedSvg() {
+    try {
+        const svg = document.querySelector('svg');
+        if (!svg) {
+            console.error('No SVG found to export');
+            return;
+        }
+
+        // Create a clone of the SVG for export
+        const exportSvg = cloneSvgWithCustomColors(svg);
+
+        // Apply current viewport (zoom/pan) to the export
+        applyViewboxToExport(exportSvg);
+
+        // Remove elements from hidden layers
+        removeHiddenLayers(exportSvg);
+
+        // Clean up demo-specific artifacts
+        cleanSvgForExport(exportSvg);
+
+        // Download the customized SVG
+        downloadSvgFile(exportSvg);
+
+    } catch (error) {
+        console.error('Error exporting SVG:', error);
+        alert('Error exporting SVG file. Please check the console for details.');
+    }
+}
+
+function cloneSvgWithCustomColors(originalSvg) {
+    // Clone the SVG element
+    const clonedSvg = originalSvg.cloneNode(true);
+
+    // Parse original colors from SVG CSS to preserve them
+    const originalColors = parseColorsFromSvgCss(originalSvgStyles);
+
+    // First, convert all CSS colors to inline attributes (preserve original colors)
+    if (metadata && metadata.nets) {
+        Object.entries(metadata.nets).forEach(([netName, netInfo]) => {
+            if (!netInfo.css_classes) return;
+
+            Object.values(netInfo.css_classes).forEach(cssClass => {
+                const elements = clonedSvg.querySelectorAll(`.${cssClass}`);
+                const classColors = originalColors.get(cssClass);
+
+                if (elements.length > 0 && classColors) {
+                    elements.forEach(element => {
+                        // Apply original CSS colors as inline attributes
+                        if (classColors.fill && classColors.fill !== 'none') {
+                            element.setAttribute('fill', classColors.fill);
+                        }
+                        if (classColors.stroke && classColors.stroke !== 'none') {
+                            element.setAttribute('stroke', classColors.stroke);
+                        }
+                    });
+                }
+            });
+        });
+    }
+
+    // Then override with custom colors where they exist
+    customNetColors.forEach((customColor, netName) => {
+        const netInfo = metadata.nets[netName];
+        if (!netInfo) return;
+
+        // Apply custom color to all elements of each CSS class for this net
+        Object.values(netInfo.css_classes).forEach(cssClass => {
+            const elements = clonedSvg.querySelectorAll(`.${cssClass}`);
+            elements.forEach(element => {
+                // Override with custom colors
+                element.setAttribute('fill', customColor);
+
+                // Only override stroke if element originally had a stroke (not 'none')
+                const originalClassColors = originalColors.get(cssClass);
+                if (originalClassColors && originalClassColors.stroke && originalClassColors.stroke !== 'none') {
+                    element.setAttribute('stroke', customColor);
+                }
+            });
+        });
+    });
+
+    return clonedSvg;
+}
+
+function applyViewboxToExport(exportSvg) {
+    // Apply the current viewBox transformation to maintain zoom/pan
+    const currentViewBox = document.querySelector('svg').getAttribute('viewBox');
+    if (currentViewBox) {
+        exportSvg.setAttribute('viewBox', currentViewBox);
+    }
+}
+
+function removeHiddenLayers(exportSvg) {
+    if (!metadata || !metadata.copper_layers) return;
+
+    // Remove elements belonging to hidden layers
+    metadata.copper_layers.forEach(layer => {
+        if (!visibleLayers.has(layer)) {
+            // Find all nets and their CSS classes for this layer
+            Object.values(metadata.nets).forEach(netInfo => {
+                if (netInfo.css_classes && netInfo.css_classes[layer]) {
+                    const cssClass = netInfo.css_classes[layer];
+                    const elementsToRemove = exportSvg.querySelectorAll(`.${cssClass}`);
+                    elementsToRemove.forEach(element => element.remove());
+                }
+            });
+        }
+    });
+}
+
+function cleanSvgForExport(exportSvg) {
+    // Remove the internal style element (we've converted colors to inline)
+    const styleElement = exportSvg.querySelector('style');
+    if (styleElement) {
+        styleElement.remove();
+    }
+
+    // Remove any demo-specific IDs or classes
+    exportSvg.removeAttribute('id');
+
+    // Ensure proper SVG namespace
+    exportSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    if (exportSvg.getAttribute('xmlns:xlink')) {
+        exportSvg.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
+    }
+}
+
+function downloadSvgFile(exportSvg) {
+    // Serialize the SVG to string
+    const serializer = new XMLSerializer();
+    let svgString = serializer.serializeToString(exportSvg);
+
+    // Add XML declaration for proper SVG format
+    svgString = '<?xml version="1.0" encoding="UTF-8"?>\n' + svgString;
+
+    // Create blob and download
+    const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+
+    // Create temporary download link
+    const downloadLink = document.createElement('a');
+    downloadLink.href = url;
+
+    // Generate filename with timestamp
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-');
+    const hasCustomColors = customNetColors.size > 0;
+    const suffix = hasCustomColors ? '-customized' : '';
+    downloadLink.download = `pcb-demo${suffix}-${timestamp}.svg`;
+
+    // Trigger download
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+
+    // Clean up object URL
+    URL.revokeObjectURL(url);
+
+    console.log(`SVG exported successfully: ${downloadLink.download}`);
+}
+
 // Load demo when page loads
 document.addEventListener('DOMContentLoaded', loadDemo);

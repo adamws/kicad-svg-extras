@@ -210,21 +210,44 @@
             border-left: 4px solid #2196f3;
         }
 
-        .reset-view {
-            width: auto;
-            padding: 8px 16px;
+        .svg-controls {
+            display: flex;
+            gap: 10px;
             margin-top: 15px;
-            background: #2196f3;
-            color: white;
+            justify-content: center;
+        }
+
+        .reset-view, .download-svg {
+            padding: 8px 16px;
             border: none;
             border-radius: 4px;
             cursor: pointer;
             transition: background 0.2s;
             font-size: 14px;
+            font-weight: 500;
+        }
+
+        .reset-view {
+            background: #2196f3;
+            color: white;
         }
 
         .reset-view:hover {
             background: #1976d2;
+        }
+
+        .download-svg {
+            background: #4caf50;
+            color: white;
+        }
+
+        .download-svg:hover {
+            background: #45a049;
+        }
+
+        .download-svg:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
         }
 
         .layer-controls {
@@ -297,7 +320,10 @@
                     <!-- SVG will be loaded here -->
                     <p>Loading PCB...</p>
                 </div>
-                <button class="reset-view" onclick="resetSvgView()">Reset View</button>
+                <div class="svg-controls">
+                    <button class="reset-view" onclick="resetSvgView()">Reset View</button>
+                    <button class="download-svg" onclick="exportCustomizedSvg()">Download SVG</button>
+                </div>
             </div>
 
             <div class="controls">
