@@ -1,0 +1,86 @@
+{
+  "format_version": "1.0",
+  "generated_with_css_classes": true,
+  "layers": [
+    "F.Cu",
+    "B.Cu"
+  ],
+  "copper_layers": [
+    "F.Cu",
+    "B.Cu"
+  ],
+  "nets": {
+    "<no_net>": {
+      "original_name": "<no_net>",
+      "color": "#C83434",
+      "css_classes": {
+        "F.Cu": "net-no-net-f-cu",
+        "B.Cu": "net-no-net-b-cu"
+      },
+      "css_class_generic": "net-no-net"
+    },
+    "D+": {
+      "original_name": "D+",
+      "color": "#C83434",
+      "css_classes": {
+        "F.Cu": "net-dplus-f-cu",
+        "B.Cu": "net-dplus-b-cu"
+      },
+      "css_class_generic": "net-dplus"
+    },
+    "D-": {
+      "original_name": "D-",
+      "color": "#C83434",
+      "css_classes": {
+        "F.Cu": "net-d-f-cu",
+        "B.Cu": "net-d-b-cu"
+      },
+      "css_class_generic": "net-d"
+    },
+    "GND": {
+      "original_name": "GND",
+      "color": "#C83434",
+      "css_classes": {
+        "F.Cu": "net-gnd-f-cu",
+        "B.Cu": "net-gnd-b-cu"
+      },
+      "css_class_generic": "net-gnd"
+    },
+    "N$1": {
+      "original_name": "N$1",
+      "color": "#C83434",
+      "css_classes": {
+        "F.Cu": "net-n1-f-cu",
+        "B.Cu": "net-n1-b-cu"
+      },
+      "css_class_generic": "net-n1"
+    },
+    "N$2": {
+      "original_name": "N$2",
+      "color": "#C83434",
+      "css_classes": {
+        "F.Cu": "net-n2-f-cu",
+        "B.Cu": "net-n2-b-cu"
+      },
+      "css_class_generic": "net-n2"
+    },
+    "VBUS": {
+      "original_name": "VBUS",
+      "color": "#C83434",
+      "css_classes": {
+        "F.Cu": "net-vbus-f-cu",
+        "B.Cu": "net-vbus-b-cu"
+      },
+      "css_class_generic": "net-vbus"
+    },
+    "VCC": {
+      "original_name": "VCC",
+      "color": "#C83434",
+      "css_classes": {
+        "F.Cu": "net-vcc-f-cu",
+        "B.Cu": "net-vcc-b-cu"
+      },
+      "css_class_generic": "net-vcc"
+    }
+  }
+}

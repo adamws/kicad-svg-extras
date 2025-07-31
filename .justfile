@@ -86,6 +86,25 @@ demo-kicad-cli-comparison:
   just svg-mm-to-cm resources/kicad-cli.svg
   just svg-fix-area resources/kicad-cli.svg
 
+demo-readme1:
+  #!/usr/bin/env bash
+  set {{ bash_flags }}
+  . .env/bin/activate
+  kicad-svg-extras --output resources/basic-example.svg {{ kicad_demo }}
+  just svg-mm-to-cm resources/basic-example.svg
+
+demo-readme2:
+  #!/usr/bin/env bash
+  set {{ bash_flags }}
+  . .env/bin/activate
+  kicad-svg-extras --output resources/color-priority-demo.svg \
+    --layers "B.Cu" \
+    --ignore-project-colors \
+    --net-color "VCC:#fabd2f" \
+    --colors resources/color-config-example.json \
+    {{ kicad_demo }}
+  just svg-mm-to-cm resources/color-priority-demo.svg
+
 demo-interactive:
   #!/usr/bin/env bash
   set {{ bash_flags }}

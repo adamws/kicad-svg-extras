@@ -1,0 +1,7 @@
+{
+  "net_colors": {
+    "N$*": "#b8bb26",
+    "VCC": "black",
+    "GND": "gray"
+  }
+}
