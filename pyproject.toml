@@ -46,6 +46,7 @@ packages = ["src/kicad_svg_extras"]
 dependencies = [
   "coverage[toml]>=6.5",
   "pytest",
+  "pytest-cov",
   "pytest-html",
   "xmldiff>=2.7",
 ]
@@ -53,14 +54,11 @@ dependencies = [
 [tool.hatch.envs.default.scripts]
 test-unit = "pytest -m unit {args}"
 test-unit-cov = "coverage run --source src/* -m pytest -m unit {args}"
-test-functional = "echo \"Functional testing not available in default env\""
+test-functional = "pytest -m functional --html=output_test/functional_report.html --self-contained-html {args}"
+test-functional-cov = "coverage run --source src/* -m pytest -m functional --html=output_test/functional_report.html --self-contained-html {args}"
 cov-report = [
   "- coverage combine",
   "coverage report -m",
-]
-cov = [
-  "test-unit-cov",
-  "cov-report",
 ]
 
 [tool.hatch.envs.lint]

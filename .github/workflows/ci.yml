@@ -31,7 +31,8 @@ jobs:
 
     - name: Test
       run: |
-        hatch run cov
+        hatch run test-unit-cov
+        hatch run cov-report
 
     - name: Coverage
       if: matrix.python-version == '3.13'
@@ -55,15 +56,14 @@ jobs:
     - name: Verify KiCad installation
       run: kicad-cli version
 
-    - name: Install test dependencies
+    - name: Install Hatch
       run: |
-        pip install --upgrade -r dev-requirements.txt
-        pip install -e .
+        pip install --upgrade hatch
 
     - name: Run functional tests
       run: |
-        pytest -m functional --cov kicad_svg_extras \
-          --html=output_test/functional_report.html --self-contained-html tests/
+        hatch run test-functional-cov
+        hatch run cov-report
       continue-on-error: true
 
     - name: Upload functional test report
@@ -77,7 +77,7 @@ jobs:
     - name: Coverage
       run: |
         echo '### Functional Tests Coverage' >> $GITHUB_STEP_SUMMARY
-        coverage report --format markdown -m >> $GITHUB_STEP_SUMMARY
+        hatch run coverage report --format markdown -m >> $GITHUB_STEP_SUMMARY
 
   lint:
     name: Lint

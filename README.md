@@ -51,14 +51,25 @@ Install using pip:
 pip install git+https://github.com/adamws/kicad-svg-extras.git
 ```
 
-> [!IMPORTANT]
-> The `kicad-svg-extras` python package depends on `pcbnew` package
-> which is distributed as part of KiCad installation.
-> This means, that on Windows it is **required** to use python bundled with KiCad.
-> On Linux, `pcbnew` package should be available globally (this can be verified by
-> running `python -c "import pcbnew; print(pcbnew.Version())"`) so it may not work
-> inside isolated environment. To install inside virtual environment created with `venv`
-> it is required to use `--system-site-package` option when creating this environment.
+**Requirements:**
+- KiCad (with Python bindings)
+- Python 3.8+
+
+The tool automatically detects and imports KiCad's `pcbnew` module from common installation locations,
+so it should work in virtual environments without special configuration.
+
+### Custom KiCad Installation Path
+
+If KiCad is installed in a non-standard location, you can specify the path to the pcbnew module
+using the `KICAD_PCBNEW_PATH` environment variable:
+
+```bash
+export KICAD_PCBNEW_PATH="/path/to/kicad/python/site-packages"
+kicad-svg-extras --output board.svg board.kicad_pcb
+```
+
+When this environment variable is set, the tool will use it exclusively and will not fall back
+to automatic discovery if the path is invalid.
 
 ## Usage
 

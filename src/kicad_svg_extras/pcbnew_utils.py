@@ -20,16 +20,16 @@ from typing import Optional, cast
 from kicad_svg_extras.layers import LAYER_DEFINITIONS
 
 try:
-    import pcbnew
-    import wx
+    from kicad_svg_extras.pcbnew_discovery import import_pcbnew, import_wx
 
+    pcbnew = import_pcbnew()
+    wx = import_wx()
     wx.Log.SetLogLevel(wx.LOG_Warning)
 except ImportError as err:
     msg = (
         "pcbnew module not available. "
         "This package requires KiCad to be installed with Python bindings. "
-        "Please install KiCad and ensure pcbnew is available in your Python "
-        "environment."
+        f"Discovery error: {err}"
     )
     raise ImportError(msg) from err
 
@@ -45,7 +45,7 @@ def load_board(pcb_file: Path):
     return board
 
 
-def get_board_bounding_box(pcb_file: Path, *, edges_only: bool = False) -> pcbnew.BOX2I:
+def get_board_bounding_box(pcb_file: Path, *, edges_only: bool = False):
     """Get the bounding box from the original PCB file.
 
     This is used to set consistent aux origin across all intermediate PCB files

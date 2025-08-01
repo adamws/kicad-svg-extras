@@ -19,14 +19,13 @@ bash_flags := if env("CLAUDECODE", "0") == "1" {
 clean-venv:
   rm -rf .env
 
-# this environment is required for running demos and functional tests
+# environment for running demos and tests
 venv:
   #!/usr/bin/env bash
   set {{ bash_flags }}
-  python -m venv --system-site-packages .env
+  python -m venv .env
   . .env/bin/activate
   python -m pip install -e .
-  python -m pip install -r dev-requirements.txt
 
 preview-svg path:
   @if [ "${CLAUDECODE:-0}" = "1" ]; then \
@@ -137,16 +136,10 @@ test-unit:
   hatch run test-unit
 
 test-functional filter="":
-  #!/usr/bin/env bash
-  set {{ bash_flags }}
-  . .env/bin/activate
-  python -m pytest -m functional --html=output_test/functional_report.html --self-contained-html {{ filter }} tests/
+  hatch run test-functional {{ filter }}
 
 test-functional-generate-refs:
-  #!/usr/bin/env bash
-  set {{ bash_flags }}
-  . .env/bin/activate
-  python -m pytest -m functional --generate-references tests/
+  hatch run test-functional --generate-references
 
 test-unit-cov:
   hatch run cov
