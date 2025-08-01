@@ -36,7 +36,7 @@ The `kicad-svg-extras` tool extends KiCad's built-in SVG export capabilities by 
     - **CSS Class Generation**: Generate SVGs with CSS classes for each net
     - **Metadata Export**: Export CSS class mappings for easy integration
     - **[Live Interactive Demo](https://adamws.github.io/kicad-svg-extras/)**: Try the web features online
-1.  ⚙️ **Extra Options**
+1. ⚙️ **Extra Options**
     - **Fit-to-Content**: Automatic canvas sizing based on board edges
     - **Zone Control**: Option to include or exclude copper zones
     - **Background Customization**: Set custom background colors instead of transparent backgrounds
@@ -169,6 +169,110 @@ kicad-svg-extras --output board.svg \
 </td>
 </tr>
 </table>
+
+## Command Line Reference
+
+**Basic Syntax:** `kicad-svg-extras -o OUTPUT_FILE [OPTIONS] PCB_FILE`
+
+<table>
+<tr>
+<th colspan="2"><b>Required Arguments</b></th>
+</tr>
+<tr>
+<td><code>PCB_FILE</code></td>
+<td>Input KiCad PCB file (<code>.kicad_pcb</code>)</td>
+</tr>
+<tr>
+<td><code>-o, --output OUTPUT_FILE</code></td>
+<td>Output SVG file path</td>
+</tr>
+<tr>
+<th colspan="2"><b>Color Configuration</b></th>
+</tr>
+<tr>
+<td><code>--net-color NET_NAME:COLOR</code></td>
+<td>Set color for specific net. Format: <code>net_name:color</code>. Can be used multiple times. Supports hex (<code>#FF0000</code>), RGB (<code>rgb(255,0,0)</code>), or named colors (<code>red</code>).</td>
+</tr>
+<tr>
+<td><code>--colors CONFIG_FILE</code></td>
+<td>JSON file with net name to color mapping</td>
+</tr>
+<tr>
+<td><code>--ignore-project-colors</code></td>
+<td>Ignore net colors defined in the KiCad project file</td>
+</tr>
+<tr>
+<td><code>-t, --theme THEME_NAME</code></td>
+<td>Color theme to use (defaults to PCB editor settings if theme not found)</td>
+</tr>
+<tr>
+<th colspan="2"><b>Layer Selection</b></th>
+</tr>
+<tr>
+<td><code>--layers LAYERS</code></td>
+<td>Comma-separated list of KiCad layer names to process (e.g., <code>F.Cu,B.Cu,In1.Cu,In2.Cu</code> or <code>F.Cu,F.SilkS,Edge.Cuts</code>). Default: <code>F.Cu,B.Cu</code></td>
+</tr>
+<tr>
+<th colspan="2"><b>Output Options</b></th>
+</tr>
+<tr>
+<td><code>--use-css-classes</code></td>
+<td>Use CSS classes for styling instead of hardcoded colors. Generates individual SVG per net (slower) but allows easy color customization via CSS. Classes: <code>.net-&lt;name&gt; { fill: color; }</code></td>
+</tr>
+<tr>
+<td><code>--export-metadata METADATA_FILE</code></td>
+<td>Export net name to CSS class mapping metadata to JSON file. Only useful with <code>--use-css-classes</code>. Contains mapping of actual net names to their CSS class names for integration purposes.</td>
+</tr>
+<tr>
+<td><code>--fit-to-content {none,all,edges_only}</code></td>
+<td>Control how bounding box is calculated: <code>none</code> disables fitting (keeps original canvas), <code>all</code> uses all PCB components, <code>edges_only</code> uses only board edges (default)</td>
+</tr>
+<tr>
+<td><code>--no-background</code></td>
+<td>Do not add a background to the output SVGs</td>
+</tr>
+<tr>
+<td><code>--background-color BACKGROUND_COLOR</code></td>
+<td>Background color for the output SVGs (default: <code>#FFFFFF</code>)</td>
+</tr>
+<tr>
+<th colspan="2"><b>PCB Content Options</b></th>
+</tr>
+<tr>
+<td><code>--skip-zones</code></td>
+<td>Skip drawing zones in the output SVGs</td>
+</tr>
+<tr>
+<th colspan="2"><b>Development & Debugging</b></th>
+</tr>
+<tr>
+<td><code>--keep-intermediates</code></td>
+<td>Keep intermediate files for debugging</td>
+</tr>
+<tr>
+<td><code>--log-level {DEBUG,INFO,WARNING,ERROR,CRITICAL}</code></td>
+<td>Set the logging level (default: INFO)</td>
+</tr>
+</table>
+
+**Examples**
+
+```bash
+# Basic usage with project colors
+kicad-svg-extras --output board.svg board.kicad_pcb
+# Custom net colors
+kicad-svg-extras --output board.svg --net-color 'GND:green' --net-color 'VCC:red' board.kicad_pcb
+# Wildcard net patterns
+kicad-svg-extras --output board.svg --net-color 'SIGNAL*:blue' board.kicad_pcb
+# Using color configuration file
+kicad-svg-extras --output board.svg --colors colors.json board.kicad_pcb
+# CSS mode for web integration
+kicad-svg-extras --output board.svg --use-css-classes --export-metadata metadata.json board.kicad_pcb
+# Custom layers and background
+kicad-svg-extras --output board.svg --layers "F.Cu,F.SilkS,Edge.Cuts" --background-color "#000000" board.kicad_pcb
+# Fit to board edges only, skip zones
+kicad-svg-extras --output board.svg --fit-to-content edges_only --skip-zones board.kicad_pcb
+```
 
 ## How It Works
 
