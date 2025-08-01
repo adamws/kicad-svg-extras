@@ -24,14 +24,35 @@ logger = logging.getLogger(__name__)
 
 
 def get_python_version_paths() -> list[str]:
-    """Get common Python version path patterns for current Python version."""
+    """Get common Python version path patterns,
+    trying current version first then others."""
     major, minor = sys.version_info[:2]
-    return [
+
+    # Start with current Python version
+    current_versions = [
         f"python{major}.{minor}",
         f"python{major}{minor}",
+    ]
+
+    # Add other common Python versions (for cross-version compatibility)
+    other_versions = []
+    for maj in [3]:  # Python 3.x
+        for min_ver in range(13, 8, -1):  # 3.13 down to 3.9
+            if maj != major or min_ver != minor:  # Skip current version
+                other_versions.extend(
+                    [
+                        f"python{maj}.{min_ver}",
+                        f"python{maj}{min_ver}",
+                    ]
+                )
+
+    # Add generic paths
+    generic_versions = [
         f"python{major}",
         "python",
     ]
+
+    return current_versions + other_versions + generic_versions
 
 
 def get_kicad_search_paths() -> list[Path]:
@@ -243,40 +264,6 @@ def import_pcbnew():
         msg = (
             f"Found pcbnew at {pcbnew_path} but failed to import it: {e}. "
             "This may indicate a KiCad installation issue or Python version mismatch."
-        )
-        raise ImportError(msg) from e
-
-
-def import_wx():
-    """Import wx module (required by pcbnew) with the same discovery mechanism.
-
-    Returns:
-        The imported wx module
-
-    Raises:
-        ImportError: If wx module cannot be found or imported
-    """
-    # First, try standard import
-    try:
-        import wx  # noqa: PLC0415
-
-        return wx
-    except ImportError:
-        logger.debug("wx not found in standard Python path")
-
-    # If pcbnew path was found, wx should be in the same location
-    pcbnew_path = find_pcbnew_module()
-    if pcbnew_path and pcbnew_path not in sys.path:
-        sys.path.insert(0, pcbnew_path)
-
-    try:
-        import wx  # noqa: PLC0415
-
-        return wx
-    except ImportError as e:
-        msg = (
-            "wx module not found. This is required by pcbnew. "
-            "Please ensure KiCad is properly installed with all Python dependencies."
         )
         raise ImportError(msg) from e
 

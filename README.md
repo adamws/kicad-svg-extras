@@ -43,12 +43,19 @@ The `kicad-svg-extras` tool extends KiCad's built-in SVG export capabilities by 
 
 ## Installation
 
-> **Note**: This project is currently in pre-release. It will be published to PyPI soon.
+### Recommended: Using pipx (Preferred)
 
-Install using pip:
+[pipx](https://pipx.pypa.io/) is the recommended way to install Python CLI tools.
+It installs the tool in an isolated environment while making it globally available:
 
 ```bash
-pip install git+https://github.com/adamws/kicad-svg-extras.git
+pipx install git+https://github.com/adamws/kicad-svg-extras.git
+```
+
+For one-time runs use [uvx](https://docs.astral.sh/uv/concepts/tools/):
+
+```bash
+uvx --from git+https://github.com/adamws/kicad-svg-extras.git kicad-svg-extras --help
 ```
 
 **Requirements:**
@@ -56,7 +63,7 @@ pip install git+https://github.com/adamws/kicad-svg-extras.git
 - Python 3.8+
 
 The tool automatically detects and imports KiCad's `pcbnew` module from common installation locations,
-so it should work in virtual environments without special configuration.
+so it works in isolated environments without special configuration.
 
 ### Custom KiCad Installation Path
 

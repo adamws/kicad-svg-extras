@@ -20,11 +20,9 @@ from typing import Optional, cast
 from kicad_svg_extras.layers import LAYER_DEFINITIONS
 
 try:
-    from kicad_svg_extras.pcbnew_discovery import import_pcbnew, import_wx
+    from kicad_svg_extras.pcbnew_discovery import import_pcbnew
 
     pcbnew = import_pcbnew()
-    wx = import_wx()
-    wx.Log.SetLogLevel(wx.LOG_Warning)
 except ImportError as err:
     msg = (
         "pcbnew module not available. "
@@ -32,6 +30,17 @@ except ImportError as err:
         f"Discovery error: {err}"
     )
     raise ImportError(msg) from err
+
+try:
+    # try to import wx to disable annoying debug prints
+    # not implementing similar schema as for `import_pcbnew`
+    # because there are some circular imports issues.
+    # If import wx fails, then we must accept log messages pollution.
+    import wx
+
+    wx.Log.SetLogLevel(wx.LOG_Warning)
+except ImportError:
+    pass
 
 logger = logging.getLogger(__name__)
 
