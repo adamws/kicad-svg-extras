@@ -255,16 +255,47 @@ def import_pcbnew():
         sys.path.insert(0, pcbnew_path)
         logger.debug(f"Added to sys.path: {pcbnew_path}")
 
+    # On Windows, add potential KiCad DLL directories for native module loading
+    dll_dirs_added = []
+    if platform.system().lower() == "windows":
+        # Get parent directory of pcbnew_path and look for bin directory
+        pcbnew_parent = Path(pcbnew_path).parent
+        potential_dll_dirs = [
+            pcbnew_parent / "bin",  # Common KiCad structure
+            pcbnew_parent,  # Sometimes DLLs are in same directory
+            pcbnew_parent / "..",  # Look one level up
+        ]
+
+        for dll_dir in potential_dll_dirs:
+            if dll_dir.exists() and dll_dir.is_dir():
+                try:
+                    # os.add_dll_directory is available in Python 3.8+
+                    if hasattr(os, "add_dll_directory"):
+                        os.add_dll_directory(str(dll_dir))
+                        dll_dirs_added.append(str(dll_dir))
+                        logger.debug(f"Added DLL directory: {dll_dir}")
+                except OSError as e:
+                    logger.debug(f"Failed to add DLL directory {dll_dir}: {e}")
+
     try:
         import pcbnew  # noqa: PLC0415
 
         logger.debug(f"pcbnew imported successfully from: {pcbnew_path}")
+        if dll_dirs_added:
+            logger.debug(f"Used DLL directories: {dll_dirs_added}")
         return pcbnew
     except ImportError as e:
         msg = (
             f"Found pcbnew at {pcbnew_path} but failed to import it: {e}. "
             "This may indicate a KiCad installation issue or Python version mismatch."
         )
+        if platform.system().lower() == "windows":
+            msg += (
+                " On Windows, this often means KiCad's DLL dependencies cannot be "
+                "found. Try setting KICAD_PCBNEW_PATH to the directory containing "
+                "both pcbnew.py and the KiCad DLLs, or ensure KiCad's bin "
+                "directory is in your PATH."
+            )
         raise ImportError(msg) from e
 
 

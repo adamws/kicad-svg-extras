@@ -171,3 +171,78 @@ jobs:
       run: |
         BRANCH=${{ steps.extract_branch.outputs.branch }}
         uvx --from git+https://github.com/adamws/kicad-svg-extras.git@$BRANCH kicad-svg-extras --help
+
+  test-windows:
+    name: Test on Windows
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install KiCad
+      run: |
+        # Install scoop if not present
+        if (-not (Get-Command scoop -ErrorAction SilentlyContinue)) {
+          Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
+          Invoke-RestMethod -Uri https://get.scoop.sh | Invoke-Expression
+        }
+        # Add extras bucket for KiCad
+        scoop bucket add extras
+        # Install KiCad
+        scoop install kicad
+      shell: powershell
+
+    - name: Verify KiCad installation
+      run: |
+        # Check if KiCad was installed via Scoop and find Python path
+        $scoopPath = "$env:USERPROFILE\scoop\apps\kicad\current"
+        if (Test-Path $scoopPath) {
+          Write-Host "KiCad found at: $scoopPath"
+          # Scoop KiCad Python paths
+          $pythonPaths = @(
+            "$scoopPath\bin\Lib\site-packages",
+            "$scoopPath\lib\site-packages"
+          )
+          foreach ($pythonPath in $pythonPaths) {
+            Write-Host "Checking Python path: $pythonPath"
+            if (Test-Path $pythonPath) {
+              Write-Host "Python path exists"
+              # Persist env variable for use in future steps
+              Add-Content -Path $env:GITHUB_ENV -Value "KICAD_PCBNEW_PATH=$pythonPath"
+              Write-Host "Set and exported KICAD_PCBNEW_PATH=$pythonPath"
+              break
+            }
+          }
+        } else {
+          Write-Host "KiCad installation not found in Scoop location, will rely on automatic discovery"
+        }
+      shell: powershell
+
+    - name: Install Hatch
+      run: pip install --upgrade hatch
+
+    - name: Run unit tests
+      run: hatch run test-unit
+
+    - name: Install pipx
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install pipx
+
+    - name: Extract branch name
+      shell: bash
+      run: echo "branch=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}" >> $GITHUB_OUTPUT
+      id: extract_branch
+
+    - name: Test pipx installation
+      run: |
+        $env:BRANCH = "${{ steps.extract_branch.outputs.branch }}"
+        pipx install "git+https://github.com/adamws/kicad-svg-extras.git@$env:BRANCH"
+        kicad-svg-extras --help
+        Write-Host "Windows pipx installation successful"
+      shell: powershell
